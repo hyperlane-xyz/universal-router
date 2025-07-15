@@ -7,7 +7,7 @@ import {HypXERC20} from '@hyperlane/core/contracts/token/extensions/HypXERC20.so
 import {StandardHookMetadata} from '@hyperlane/core/contracts/hooks/libs/StandardHookMetadata.sol';
 import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
 
-import {ITokenBridge} from '../../interfaces/external/ITokenBridge.sol';
+import {IXVeloTokenBridge} from '../../interfaces/external/IXVeloTokenBridge.sol';
 import {BridgeTypes} from '../../libraries/BridgeTypes.sol';
 import {Permit2Payments} from './../Permit2Payments.sol';
 
@@ -60,8 +60,9 @@ abstract contract BridgeRouter is Permit2Payments {
             });
             ERC20(token).safeApprove({to: bridge, amount: 0});
         } else if (bridgeType == BridgeTypes.XVELO) {
-            address _bridgeToken =
-                block.chainid == OPTIMISM_CHAIN_ID ? ITokenBridge(bridge).erc20() : ITokenBridge(bridge).xerc20();
+            address _bridgeToken = block.chainid == OPTIMISM_CHAIN_ID
+                ? IXVeloTokenBridge(bridge).erc20()
+                : IXVeloTokenBridge(bridge).xerc20();
             if (_bridgeToken != token) revert InvalidTokenAddress();
 
             prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
@@ -114,7 +115,7 @@ abstract contract BridgeRouter is Permit2Payments {
         uint256 msgFee,
         uint32 domain
     ) private {
-        ITokenBridge(bridge).sendToken{value: msgFee}({
+        IXVeloTokenBridge(bridge).sendToken{value: msgFee}({
             _recipient: recipient,
             _amount: amount,
             _domain: domain,

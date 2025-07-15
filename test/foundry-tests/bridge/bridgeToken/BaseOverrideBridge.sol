@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.24;
 
+import {InterchainGasPaymaster} from '@hyperlane/core/contracts/hooks/igp/InterchainGasPaymaster.sol';
+import {IGasOracle} from '@hyperlane/core/contracts/interfaces/IGasOracle.sol';
+
 import {RootEscrowTokenBridge} from '../../../foundry-tests/mock/MockRootXVeloBridge.sol';
 import {LeafEscrowTokenBridge} from '../../../foundry-tests/mock/MockLeafXVeloBridge.sol';
 import './../../BaseForkFixture.t.sol';
-import {ITokenBridge} from '../../../../contracts/interfaces/external/ITokenBridge.sol';
-import {InterchainGasPaymaster} from '@hyperlane/core/contracts/hooks/igp/InterchainGasPaymaster.sol';
-import {IGasOracle} from '@hyperlane/core/contracts/interfaces/IGasOracle.sol';
 
 abstract contract BaseOverrideBridge is BaseForkFixture {
     using SafeCast for uint256;
@@ -36,7 +36,7 @@ abstract contract BaseOverrideBridge is BaseForkFixture {
     function setUp() public virtual override {
         leaf_2 = 1750; // metal chain id
         leafDomain_2 = 1000001750; // metal domain
-        leafForkBlockNumber_2 = 18986842;
+        leafForkBlockNumber_2 = 19050000;
 
         leafMailboxAddress_2 = XVELO_METAL_MAILBOX_ADDRESS;
 
@@ -46,7 +46,7 @@ abstract contract BaseOverrideBridge is BaseForkFixture {
 
         // Deploy on root chain with deterministic address
         vm.startPrank(users.deployer);
-        rootXVeloTokenBridge = ITokenBridge(
+        rootXVeloTokenBridge = IXVeloTokenBridge(
             address(
                 new RootEscrowTokenBridge(
                     users.owner,
@@ -82,7 +82,7 @@ abstract contract BaseOverrideBridge is BaseForkFixture {
 
         // Deploy on leaf chain with same deployer to get same address
         vm.startPrank(users.deployer);
-        leafXVeloTokenBridge = ITokenBridge(
+        leafXVeloTokenBridge = IXVeloTokenBridge(
             address(
                 new LeafEscrowTokenBridge(
                     users.owner,

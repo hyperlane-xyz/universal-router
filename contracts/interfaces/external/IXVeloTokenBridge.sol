@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import {IInterchainSecurityModule} from '@hyperlane/core/contracts/interfaces/IInterchainSecurityModule.sol';
 
-interface ITokenBridge {
+interface IXVeloTokenBridge {
     error NotBridge();
     error ZeroAmount();
     error ZeroAddress();

@@ -35,8 +35,8 @@ abstract contract TestConstants {
 
     address public constant OPEN_USDT_OPTIMISM_MAILBOX_ADDRESS = 0xd4C1905BB1D26BC93DAC913e13CaCC278CdCC80D;
     address public constant OPEN_USDT_BASE_MAILBOX_ADDRESS = 0xeA87ae93Fa0019a82A727bfd3eBd1cFCa8f64f1D;
-    address payable public constant OPTIMISM_ROUTER_ICA_ADDRESS = payable(0x44c74D3d791cb4588732A9C9CEdbCb262875A3bE);
-    address payable public constant BASE_ROUTER_ICA_ADDRESS = payable(0xed1eaFE233a6d36A77Ee726A22Fd19b390c84B21);
+    address payable public constant OPTIMISM_ROUTER_ICA_ADDRESS = payable(0x3E343D07D024E657ECF1f8Ae8bb7a12f08652E75);
+    address payable public constant BASE_ROUTER_ICA_ADDRESS = payable(0x44647Cd983E80558793780f9a0c7C2aa9F384D07);
 
     address public constant OPEN_USDT_OPTIMISM_ISM_ADDRESS = 0x6d5dC676B03f5252c976EBa33d629fF15F03Be16;
     address public constant OPEN_USDT_BASE_ISM_ADDRESS = 0x9C53d53B652Feb2014aC6719E1Cd42B5B24B4A28;

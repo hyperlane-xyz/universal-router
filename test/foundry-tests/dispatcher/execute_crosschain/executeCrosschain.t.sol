@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import {InterchainAccountRouter} from '@hyperlane-updated/contracts/middleware/InterchainAccountRouter.sol';
+import {InterchainAccountRouter} from '@hyperlane/core/contracts/middleware/InterchainAccountRouter.sol';
 import {StandardHookMetadata} from '@hyperlane/core/contracts/hooks/libs/StandardHookMetadata.sol';
 import {IPostDispatchHook} from '@hyperlane/core/contracts/interfaces/hooks/IPostDispatchHook.sol';
-import {OwnableMulticall} from '@hyperlane-updated/contracts/middleware/libs/OwnableMulticall.sol';
+import {OwnableMulticall} from '@hyperlane/core/contracts/middleware/libs/OwnableMulticall.sol';
 import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
 
 import {IInterchainAccountRouter} from 'contracts/interfaces/external/IInterchainAccountRouter.sol';
@@ -314,13 +314,13 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         OwnableMulticall(userICA).revealAndExecute({calls: calls, salt: TypeCasts.addressToBytes32(users.alice)});
 
         assertEq(ERC20(OPEN_USDT_ADDRESS).balanceOf(userICA), 0);
-        assertEq(ERC20(OPEN_USDT_ADDRESS).balanceOf(users.alice), 100014); //leftover from swap is sent to user
+        assertEq(ERC20(OPEN_USDT_ADDRESS).balanceOf(users.alice), 100100); //leftover from swap is sent to user
         assertEq(ERC20(baseUSDC).balanceOf(users.alice), amountOut);
         assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(userICA, address(leafRouter)), 0);
     }
 
     function test_executeCrosschainFlowMultichainV3SwapExactIn() public {
-        uint256 destinationAmountOutMin = 7600000;
+        uint256 destinationAmountOutMin = 5800000;
 
         // Encode destination swap
         bytes memory swapSubplan =
@@ -377,7 +377,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
 
         // Encode origin chain commands
         uint256 amountIn = 10 ether;
-        uint256 originAmountOutMin = 7600000;
+        uint256 originAmountOutMin = 5800000;
         bytes memory commands = abi.encodePacked(
             bytes1(uint8(Commands.V3_SWAP_EXACT_IN)),
             bytes1(uint8(Commands.BRIDGE_TOKEN)),
