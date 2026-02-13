@@ -9,6 +9,9 @@ import {StandardHookMetadata} from '@hyperlane/core/contracts/hooks/libs/Standar
 import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
 
 import {ITokenBridge} from '../../interfaces/external/ITokenBridge.sol';
+import {IHypCollateralBridge} from '../../interfaces/external/IHypCollateralBridge.sol';
+import {IFeeRecipient} from '../../interfaces/external/IFeeRecipient.sol';
+import {ILinearFee} from '../../interfaces/external/ILinearFee.sol';
 import {BridgeTypes} from '../../libraries/BridgeTypes.sol';
 import {Permit2Payments} from './../Permit2Payments.sol';
 
@@ -20,8 +23,10 @@ abstract contract BridgeRouter is Permit2Payments {
     error InvalidTokenAddress();
     error InvalidRecipient();
     error InvalidBridgeType(uint8 bridgeType);
+    error TokenFeeExceedsMax(uint256 tokenFee, uint256 maxTokenFee);
 
     uint256 public constant OPTIMISM_CHAIN_ID = 10;
+    uint256 public constant BPS_DENOMINATOR = 10_000;
 
     /// @notice Send tokens x-chain using the selected bridge
     /// @param bridgeType The type of bridge to use
@@ -31,7 +36,7 @@ abstract contract BridgeRouter is Permit2Payments {
     /// @param bridge The bridge used for the token
     /// @param amount The amount to bridge
     /// @param msgFee The fee to pay for message bridging
-    /// @param tokenFee The fee to pay for token bridging
+    /// @param maxTokenFee The maximum acceptable fee for token bridging
     /// @param domain The destination domain
     /// @param payer The address to pay for the transfer
     function bridgeToken(
@@ -42,7 +47,7 @@ abstract contract BridgeRouter is Permit2Payments {
         address bridge,
         uint256 amount,
         uint256 msgFee,
-        uint256 tokenFee,
+        uint256 maxTokenFee,
         uint32 domain,
         address payer
     ) internal {
@@ -81,12 +86,15 @@ abstract contract BridgeRouter is Permit2Payments {
         } else if (bridgeType == BridgeTypes.HYP_ERC20_COLLATERAL) {
             if (address(HypERC20Collateral(bridge).wrappedToken()) != token) revert InvalidTokenAddress();
 
-            prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: tokenFee});
+            uint256 tokenFee = _getTokenFee(bridge, amount, domain);
+            if (tokenFee > maxTokenFee) revert TokenFeeExceedsMax(tokenFee, maxTokenFee);
+
+            prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
 
             executeHypERC20CollateralBridge({
                 bridge: bridge,
                 recipient: recipient,
-                amount: amount,
+                amount: amount - tokenFee,
                 msgFee: msgFee,
                 domain: domain
             });
@@ -151,6 +159,20 @@ abstract contract BridgeRouter is Permit2Payments {
             _recipient: TypeCasts.addressToBytes32(recipient),
             _amountOrId: amount
         });
+    }
+
+    /// @dev Calculates the token fee for a HypERC20Collateral bridge transfer
+    /// @param bridge The bridge contract address
+    /// @param amount The amount being bridged
+    /// @param domain The destination domain
+    /// @return fee The calculated token fee
+    function _getTokenFee(address bridge, uint256 amount, uint32 domain) private view returns (uint256 fee) {
+        address feeRecipient = IHypCollateralBridge(bridge).feeRecipient();
+        address linearFeeAddr = IFeeRecipient(feeRecipient).feeContracts(domain);
+        uint256 maxFee = ILinearFee(linearFeeAddr).maxFee();
+        uint256 halfAmount = ILinearFee(linearFeeAddr).halfAmount();
+        uint256 maxFeeBps = (maxFee * BPS_DENOMINATOR) / (2 * halfAmount);
+        fee = amount - (amount * (BPS_DENOMINATOR - maxFeeBps)) / BPS_DENOMINATOR;
     }
 
     /// @dev Moves the tokens from sender to this contract then approves the bridge

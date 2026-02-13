@@ -334,7 +334,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                     address bridge;
                     uint256 amount;
                     uint256 msgFee;
-                    uint256 tokenFee;
+                    uint256 maxTokenFee;
                     uint32 domain;
                     bool payerIsUser;
                     assembly {
@@ -344,7 +344,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         bridge := calldataload(add(inputs.offset, 0x60))
                         amount := calldataload(add(inputs.offset, 0x80))
                         msgFee := calldataload(add(inputs.offset, 0xA0))
-                        tokenFee := calldataload(add(inputs.offset, 0xC0))
+                        maxTokenFee := calldataload(add(inputs.offset, 0xC0))
                         domain := calldataload(add(inputs.offset, 0xE0))
                         payerIsUser := calldataload(add(inputs.offset, 0x100))
                     }
@@ -360,7 +360,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         bridge: bridge,
                         amount: amount,
                         msgFee: msgFee,
-                        tokenFee: tokenFee,
+                        maxTokenFee: maxTokenFee,
                         domain: domain,
                         payer: payer
                     });
