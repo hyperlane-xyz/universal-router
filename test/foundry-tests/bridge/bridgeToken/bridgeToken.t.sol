@@ -8,6 +8,7 @@ import {Constants} from '../../../../contracts/libraries/Constants.sol';
 import {IDomainRegistry} from '../../../../contracts/interfaces/external/IDomainRegistry.sol';
 import {HypERC20Collateral} from '@hyperlane/core/contracts/token/HypERC20Collateral.sol';
 import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
+import {Quote} from '@hyperlane-updated/contracts/interfaces/ITokenBridge.sol';
 import {ProtocolFee} from '@hyperlane/core/contracts/hooks/ProtocolFee.sol';
 import './BaseOverrideBridge.sol';
 
@@ -1362,6 +1363,23 @@ contract BridgeTokenTest is BaseOverrideBridge {
     /// HYP_ERC20_COLLATERAL TESTS ///
 
     modifier whenBridgeTypeIsHYP_ERC20_COLLATERAL() {
+        // Mock quoteTransferRemote on the bridge (old npm version doesn't have it)
+        // No fee configured, so quotes[1].amount = amount (no token fee)
+        Quote[] memory quotes = new Quote[](3);
+        quotes[0] = Quote({token: address(0), amount: feeAmount});
+        quotes[1] = Quote({token: WETH9_ADDRESS, amount: wethBridgeAmount});
+        quotes[2] = Quote({token: WETH9_ADDRESS, amount: 0});
+        vm.mockCall(
+            address(hypERC20CollateralBridge),
+            abi.encodeWithSignature(
+                'quoteTransferRemote(uint32,bytes32,uint256)',
+                leafDomain,
+                TypeCasts.addressToBytes32(users.alice),
+                wethBridgeAmount
+            ),
+            abi.encode(quotes)
+        );
+
         // Add SWEEP command after BRIDGE_TOKEN to refund excess ETH
         commands = abi.encodePacked(bytes1(uint8(Commands.BRIDGE_TOKEN)), bytes1(uint8(Commands.SWEEP)));
         inputs = new bytes[](2);
@@ -1372,7 +1390,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             address(hypERC20CollateralBridge),
             wethBridgeAmount, // amount
             feeAmount + leftoverETH, // msgFee
-            wethBridgeAmount, // tokenFee (same as amount for collateral bridge)
+            wethBridgeAmount, // maxTokenFee
             leafDomain,
             true
         );

@@ -396,7 +396,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                     }
                     bytes calldata hookMetadata = inputs.toBytes(9);
 
-                    ERC20(token).approve(icaRouter, tokenFee);
+                    if (token != address(0)) ERC20(token).approve(icaRouter, tokenFee);
                     IInterchainAccountRouter(icaRouter).callRemoteCommitReveal{value: msgFee}({
                         _destination: domain,
                         _router: remoteRouter,

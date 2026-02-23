@@ -1687,6 +1687,8 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
             MESSAGE_FEE + leftoverETH, // fee to dispatch x-chain message
+            address(0), // token
+            0, // tokenFee
             IPostDispatchHook(address(rootIcaRouter.hook())), // post dispatch hook
             hookMetadata // hook metadata
         );
@@ -1857,7 +1859,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             _amountIn: amountIn,
             _originAmountOutMin: originAmountOutMin,
             _destinationAmountOutMin: destinationAmountOutMin,
-            _msgFee: msgFee,
+            _msgFee: MESSAGE_FEE,
             _leftoverETH: 0
         });
 
@@ -1877,7 +1879,6 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             _originAmountOutMin: originAmountOutMin,
             _destinationAmountOutMin: destinationAmountOutMin,
             _msgFee: MESSAGE_FEE,
-            0, // tokenFee
             _leftoverETH: 0
         });
 
@@ -1898,7 +1899,6 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             _originAmountOutMin: originAmountOutMin,
             _destinationAmountOutMin: destinationAmountOutMin,
             _msgFee: MESSAGE_FEE,
-            0, // tokenFee
             _leftoverETH: leftoverETH
         });
 
@@ -1920,7 +1920,6 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             _originAmountOutMin: originAmountOutMin,
             _destinationAmountOutMin: destinationAmountOutMin,
             _msgFee: MESSAGE_FEE,
-            0, // tokenFee
             _leftoverETH: leftoverETH
         });
 
@@ -1942,7 +1941,6 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             _originAmountOutMin: originAmountOutMin,
             _destinationAmountOutMin: destinationAmountOutMin,
             _msgFee: MESSAGE_FEE,
-            0, // tokenFee
             _leftoverETH: leftoverETH
         });
 
@@ -1974,7 +1972,6 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             _originAmountOutMin: originAmountOutMin,
             _destinationAmountOutMin: destinationAmountOutMin,
             _msgFee: MESSAGE_FEE,
-            0, // tokenFee
             _leftoverETH: leftoverETH
         });
 
@@ -2091,6 +2088,8 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
             _msgFee + _leftoverETH, // fee to dispatch x-chain message
+            address(0), // token
+            0, // tokenFee
             rootIcaRouter.hook(), // post dispatch hook
             hookMetadata // hook metadata
         );
