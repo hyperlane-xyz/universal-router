@@ -4,28 +4,36 @@ pragma solidity ^0.8.24;
 import {Test} from 'forge-std/Test.sol';
 import {Quote, ITokenBridge as IHypTokenBridge} from '@hyperlane-updated/contracts/interfaces/ITokenBridge.sol';
 import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
+import {BridgeRouter} from '../../../contracts/modules/bridge/BridgeRouter.sol';
+import {PaymentsParameters, PaymentsImmutables} from '../../../contracts/modules/PaymentsImmutables.sol';
 
-/// @notice Unit tests for the quoteExactInputBridgeAmount calculation in BridgeRouter.
-/// Tests the formula: bridgeAmount = ((amount - igpTokenFee) * amount) / (quotes[1].amount + quotes[2].amount)
-contract QuoteExactInputTest is Test {
-    address constant BRIDGE = address(0xB1);
-    address constant TOKEN = address(0xC1);
-    address constant RECIPIENT = address(0xA1);
-    uint32 constant DOMAIN = 8453;
+/// @dev Minimal harness that exposes BridgeRouter.quoteExactInputBridgeAmount for testing
+contract BridgeRouterHarness is BridgeRouter {
+    constructor() PaymentsImmutables(PaymentsParameters({permit2: address(0), weth9: address(0)})) {}
 
-    /// @dev Replicates BridgeRouter.quoteExactInputBridgeAmount for unit testing
-    function quoteExactInputBridgeAmount(
+    function exposed_quoteExactInputBridgeAmount(
         address bridge,
         address token,
         address recipient,
         uint256 amount,
         uint32 domain
-    ) internal view returns (uint256 bridgeAmount) {
-        bytes32 recipientBytes32 = TypeCasts.addressToBytes32(recipient);
-        Quote[] memory quotes = IHypTokenBridge(bridge).quoteTransferRemote(domain, recipientBytes32, amount);
-        uint256 igpTokenFee = (quotes[0].token == token) ? quotes[0].amount : 0;
-        uint256 linearQuotedTokens = quotes[1].amount + quotes[2].amount;
-        bridgeAmount = ((amount - igpTokenFee) * amount) / linearQuotedTokens;
+    ) external view returns (uint256) {
+        return quoteExactInputBridgeAmount(bridge, token, recipient, amount, domain);
+    }
+}
+
+/// @notice Unit tests for BridgeRouter.quoteExactInputBridgeAmount
+/// Tests the formula: bridgeAmount = ((amount - igpTokenFee) * amount) / (quotes[1].amount + quotes[2].amount)
+contract QuoteExactInputTest is Test {
+    BridgeRouterHarness harness;
+
+    address constant BRIDGE = address(0xB1);
+    address constant TOKEN = address(0xC1);
+    address constant RECIPIENT = address(0xA1);
+    uint32 constant DOMAIN = 8453;
+
+    function setUp() public {
+        harness = new BridgeRouterHarness();
     }
 
     /// @dev Helper to mock quoteTransferRemote with the given quotes
@@ -52,7 +60,7 @@ contract QuoteExactInputTest is Test {
             Quote({token: TOKEN, amount: 0})              // no external fee
         ]);
 
-        uint256 bridgeAmount = quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
+        uint256 bridgeAmount = harness.exposed_quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
         assertEq(bridgeAmount, amount);
     }
 
@@ -65,13 +73,12 @@ contract QuoteExactInputTest is Test {
             Quote({token: TOKEN, amount: 0})               // no external fee
         ]);
 
-        uint256 bridgeAmount = quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
+        uint256 bridgeAmount = harness.exposed_quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
         assertEq(bridgeAmount, amount);
     }
 
-    /// @notice 5 bps internal fee (Eclipse USDC warp route style)
+    /// @notice 5 bps internal fee (deployed USDC warp route style)
     /// For 1000 USDC: quotes[1] = 1000.5 USDC, quotes[2] = 0
-    /// bridgeAmount = 1000e6 * 1000e6 / 1000.5e6 = 999500249
     function test_internalFeeOnly() public {
         uint256 amount = 1000e6;
         uint256 internalFee = 500000; // 0.5 USDC = 5 bps of 1000 USDC
@@ -81,7 +88,7 @@ contract QuoteExactInputTest is Test {
             Quote({token: TOKEN, amount: 0})                        // no external fee
         ]);
 
-        uint256 bridgeAmount = quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
+        uint256 bridgeAmount = harness.exposed_quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
 
         // bridgeAmount + fee(bridgeAmount) should approximate amount
         // fee(bridgeAmount) = internalFee * bridgeAmount / amount
@@ -100,7 +107,7 @@ contract QuoteExactInputTest is Test {
             Quote({token: TOKEN, amount: externalFee})     // 0.13 USDC external
         ]);
 
-        uint256 bridgeAmount = quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
+        uint256 bridgeAmount = harness.exposed_quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
 
         uint256 feeOnBridgeAmount = (externalFee * bridgeAmount) / amount;
         assertApproxEqAbs(bridgeAmount + feeOnBridgeAmount, amount, 1, 'bridgeAmount + fee should equal amount');
@@ -118,7 +125,7 @@ contract QuoteExactInputTest is Test {
             Quote({token: TOKEN, amount: externalFee})
         ]);
 
-        uint256 bridgeAmount = quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
+        uint256 bridgeAmount = harness.exposed_quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
 
         uint256 totalFee = internalFee + externalFee;
         uint256 feeOnBridgeAmount = (totalFee * bridgeAmount) / amount;
@@ -137,7 +144,7 @@ contract QuoteExactInputTest is Test {
             Quote({token: TOKEN, amount: 0})                        // no external fee
         ]);
 
-        uint256 bridgeAmount = quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
+        uint256 bridgeAmount = harness.exposed_quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
 
         // bridgeAmount should be less than the no-IGP case
         uint256 availableForBridge = amount - igpFee;
@@ -156,7 +163,7 @@ contract QuoteExactInputTest is Test {
             Quote({token: TOKEN, amount: 0})
         ]);
 
-        uint256 bridgeAmount = quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
+        uint256 bridgeAmount = harness.exposed_quoteExactInputBridgeAmount(BRIDGE, TOKEN, RECIPIENT, amount, DOMAIN);
 
         uint256 feeOnBridgeAmount = (internalFee * bridgeAmount) / amount;
         assertApproxEqAbs(bridgeAmount + feeOnBridgeAmount, amount, 1e6, 'bridgeAmount + fee should equal amount');
