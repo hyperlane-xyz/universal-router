@@ -83,12 +83,16 @@ abstract contract BridgeRouter is Permit2Payments {
         } else if (bridgeType == BridgeTypes.HYP_ERC20_COLLATERAL) {
             if (address(HypERC20Collateral(bridge).wrappedToken()) != token) revert InvalidTokenAddress();
 
-            // Solve for sendAmount such that sendAmount + fee(sendAmount) + igpFee = amount
-            // Under a linear fee regime: sendAmount = (amount - igpFee) * amount / quoteAmount
+            // Solve for sendAmount such that sendAmount + fee(sendAmount) = amount - igpTokenFee
+            // quotes[0]: IGP fee (fixed, may be native or token-denominated)
+            // quotes[1]: amount + internal fee (linear)
+            // quotes[2]: external fee e.g. CCTP (linear)
+            // Under a linear fee regime: sendAmount = (amount - igpTokenFee) * amount / (quotes[1] + quotes[2])
             bytes32 recipientBytes32 = TypeCasts.addressToBytes32(recipient);
             Quote[] memory quotes = IHypTokenBridge(bridge).quoteTransferRemote(domain, recipientBytes32, amount);
-            uint256 igpFee = quotes[0].token != address(0) ? quotes[0].amount : 0;
-            uint256 sendAmount = ((amount - igpFee) * amount) / quotes[1].amount;
+            uint256 igpTokenFee = (quotes[0].token == token) ? quotes[0].amount : 0;
+            uint256 linearQuotedTokens = quotes[1].amount + quotes[2].amount;
+            uint256 sendAmount = ((amount - igpTokenFee) * amount) / linearQuotedTokens;
             uint256 tokenFee = amount - sendAmount;
             if (tokenFee > maxTokenFee) revert TokenFeeExceedsMax(tokenFee, maxTokenFee);
 
