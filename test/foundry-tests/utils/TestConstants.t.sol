@@ -50,9 +50,9 @@ abstract contract TestConstants {
     address public constant XVELO_METAL_MAILBOX_ADDRESS = 0x730f8a4128Fa8c53C777B62Baa1abeF94cAd34a9;
     address public constant ROOT_HL_MESSAGE_MODULE_ADDRESS = 0x2BbA7515F7cF114B45186274981888D8C2fBA15E;
 
-    // Eclipse USDC warp route (HypERC20Collateral with 5 bps fee for EVM-to-EVM)
-    address public constant ECLIPSE_USDC_OPTIMISM_BRIDGE = 0x02bFd67829317D666dc7dFA030F18eaCC12c2cfb;
-    address public constant ECLIPSE_USDC_BASE_BRIDGE = 0x37e637891A558B5b621723cbf8Fc771525f280C1;
+    // Deployed USDC warp route (HypERC20Collateral with 5 bps fee for EVM-to-EVM)
+    address public constant USDC_OPTIMISM_BRIDGE = 0x02bFd67829317D666dc7dFA030F18eaCC12c2cfb;
+    address public constant USDC_BASE_BRIDGE = 0x37e637891A558B5b621723cbf8Fc771525f280C1;
     address public constant OPTIMISM_USDC_ADDRESS = 0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85;
     address public constant BASE_USDC_ADDRESS = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
 

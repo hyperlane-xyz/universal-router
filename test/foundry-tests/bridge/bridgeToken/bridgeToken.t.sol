@@ -26,7 +26,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
     uint256 leftoverETH = MESSAGE_FEE / 2;
     uint256 feeAmount = MESSAGE_FEE;
 
-    // Bridge amounts for HypERC20Collateral tests (using real Eclipse USDC bridge)
+    // Bridge amounts for HypERC20Collateral tests (using deployed USDC warp route)
     uint256 public usdcBridgeAmount = 1000 * USDC_1;
     uint256 public usdcInitialBal = usdcBridgeAmount * 2;
 
@@ -43,12 +43,12 @@ contract BridgeTokenTest is BaseOverrideBridge {
         vm.selectFork(rootId);
         deal(VELO_ADDRESS, users.alice, xVeloInitialBal);
 
-        // Fund alice with USDC for HypERC20Collateral tests (real Eclipse USDC bridge on forked Optimism)
+        // Fund alice with USDC for HypERC20Collateral tests (deployed USDC warp route on forked Optimism)
         deal(OPTIMISM_USDC_ADDRESS, users.alice, usdcInitialBal);
 
-        // Fund Eclipse USDC bridge on Base with USDC liquidity for cross-chain payouts
+        // Fund USDC bridge on Base with USDC liquidity for cross-chain payouts
         vm.selectFork(leafId);
-        deal(BASE_USDC_ADDRESS, ECLIPSE_USDC_BASE_BRIDGE, usdcInitialBal);
+        deal(BASE_USDC_ADDRESS, USDC_BASE_BRIDGE, usdcInitialBal);
         vm.selectFork(rootId);
 
         inputs = new bytes[](1);
@@ -1300,7 +1300,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
     /// HYP_ERC20_COLLATERAL TESTS ///
 
     modifier whenBridgeTypeIsHYP_ERC20_COLLATERAL() {
-        // Uses real Eclipse USDC HypERC20Collateral bridge on forked Optimism (5 bps fee for EVM-to-EVM)
+        // Uses deployed USDC HypERC20Collateral bridge on forked Optimism (5 bps fee for EVM-to-EVM)
         // No mocking needed — quoteTransferRemote hits the real on-chain contract
 
         // Add SWEEP command after BRIDGE_TOKEN to refund excess ETH
@@ -1310,7 +1310,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
             ActionConstants.MSG_SENDER,
             OPTIMISM_USDC_ADDRESS,
-            ECLIPSE_USDC_OPTIMISM_BRIDGE,
+            USDC_OPTIMISM_BRIDGE,
             usdcBridgeAmount, // amount
             feeAmount, // msgFee (all goes to mock mailbox hooks)
             usdcBridgeAmount, // maxTokenFee (generous cap for 5 bps fee)
@@ -1332,7 +1332,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
             ActionConstants.MSG_SENDER,
             VELO_ADDRESS, // wrong token
-            ECLIPSE_USDC_OPTIMISM_BRIDGE,
+            USDC_OPTIMISM_BRIDGE,
             usdcBridgeAmount,
             feeAmount,
             usdcBridgeAmount,
@@ -1392,7 +1392,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
         assertEq(balanceAfter, balanceBefore - feeAmount, 'ETH fee not consumed');
         // Assert no dangling ERC20 approvals
         assertEq(ERC20(OPTIMISM_USDC_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(OPTIMISM_USDC_ADDRESS).allowance(address(router), ECLIPSE_USDC_OPTIMISM_BRIDGE), 0);
+        assertEq(ERC20(OPTIMISM_USDC_ADDRESS).allowance(address(router), USDC_OPTIMISM_BRIDGE), 0);
 
         // Verify destination balance — process message on leaf chain and check recipient received USDC
         // The 5 bps fee is deducted, so recipient gets sendAmount < usdcBridgeAmount
@@ -1444,7 +1444,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
         assertEq(balanceAfter, balanceBefore - feeAmount, 'ETH fee not consumed');
         // Assert no dangling ERC20 approvals
         assertEq(ERC20(OPTIMISM_USDC_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(OPTIMISM_USDC_ADDRESS).allowance(address(router), ECLIPSE_USDC_OPTIMISM_BRIDGE), 0);
+        assertEq(ERC20(OPTIMISM_USDC_ADDRESS).allowance(address(router), USDC_OPTIMISM_BRIDGE), 0);
 
         // Verify destination balance — process message on leaf chain and check recipient received USDC
         vm.selectFork(leafId);

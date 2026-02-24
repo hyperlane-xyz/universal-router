@@ -83,22 +83,13 @@ abstract contract BridgeRouter is Permit2Payments {
         } else if (bridgeType == BridgeTypes.HYP_ERC20_COLLATERAL) {
             if (address(HypERC20Collateral(bridge).wrappedToken()) != token) revert InvalidTokenAddress();
 
-            // Solve for sendAmount such that sendAmount + fee(sendAmount) = amount - igpTokenFee
-            // quotes[0]: IGP fee (fixed, may be native or token-denominated)
-            // quotes[1]: amount + internal fee (linear)
-            // quotes[2]: external fee e.g. CCTP (linear)
-            // Under a linear fee regime: sendAmount = (amount - igpTokenFee) * amount / (quotes[1] + quotes[2])
-            bytes32 recipientBytes32 = TypeCasts.addressToBytes32(recipient);
-            Quote[] memory quotes = IHypTokenBridge(bridge).quoteTransferRemote(domain, recipientBytes32, amount);
-            uint256 igpTokenFee = (quotes[0].token == token) ? quotes[0].amount : 0;
-            uint256 linearQuotedTokens = quotes[1].amount + quotes[2].amount;
-            uint256 sendAmount = ((amount - igpTokenFee) * amount) / linearQuotedTokens;
-            uint256 tokenFee = amount - sendAmount;
+            uint256 bridgeAmount = quoteExactInputBridgeAmount(bridge, token, recipient, amount, domain);
+            uint256 tokenFee = amount - bridgeAmount;
             if (tokenFee > maxTokenFee) revert TokenFeeExceedsMax(tokenFee, maxTokenFee);
 
             prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
 
-            executeHypERC20CollateralBridge({bridge: bridge, recipient: recipient, amount: sendAmount, msgFee: msgFee, domain: domain});
+            executeHypERC20CollateralBridge({bridge: bridge, recipient: recipient, amount: bridgeAmount, msgFee: msgFee, domain: domain});
             ERC20(token).safeApprove({to: bridge, amount: 0});
         } else {
             revert InvalidBridgeType({bridgeType: bridgeType});
@@ -160,6 +151,29 @@ abstract contract BridgeRouter is Permit2Payments {
             _recipient: TypeCasts.addressToBytes32(recipient),
             _amountOrId: amount
         });
+    }
+
+    /// @dev Computes the amount to pass to transferRemote such that bridgeAmount + fee(bridgeAmount) = amount
+    /// Assumes internal (quotes[1]) and external (quotes[2]) fees scale linearly with amount.
+    /// The IGP fee (quotes[0]) is fixed and deducted from available amount if token-denominated.
+    /// @param bridge The HypERC20Collateral bridge address
+    /// @param token The collateral token address
+    /// @param recipient The recipient address on the destination chain
+    /// @param amount The total token amount the user provides
+    /// @param domain The destination domain
+    /// @return bridgeAmount The amount to pass to transferRemote
+    function quoteExactInputBridgeAmount(
+        address bridge,
+        address token,
+        address recipient,
+        uint256 amount,
+        uint32 domain
+    ) internal view returns (uint256 bridgeAmount) {
+        bytes32 recipientBytes32 = TypeCasts.addressToBytes32(recipient);
+        Quote[] memory quotes = IHypTokenBridge(bridge).quoteTransferRemote(domain, recipientBytes32, amount);
+        uint256 igpTokenFee = (quotes[0].token == token) ? quotes[0].amount : 0;
+        uint256 linearQuotedTokens = quotes[1].amount + quotes[2].amount;
+        bridgeAmount = ((amount - igpTokenFee) * amount) / linearQuotedTokens;
     }
 
     /// @dev Moves the tokens from sender to this contract then approves the bridge
