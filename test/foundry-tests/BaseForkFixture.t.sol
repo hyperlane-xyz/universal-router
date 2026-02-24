@@ -19,6 +19,7 @@ import {UniversalRouter} from '../../contracts/UniversalRouter.sol';
 import {Dispatcher} from '../../contracts/base/Dispatcher.sol';
 import {Payments} from '../../contracts/modules/Payments.sol';
 import {CreateXLibrary} from '../../contracts/libraries/CreateXLibrary.sol';
+import {Constants as ScriptConstants} from '../../script/Constants.sol';
 import {ITokenBridge} from '../../contracts/interfaces/external/ITokenBridge.sol';
 import {IRootHLMessageModule} from '../../contracts/interfaces/external/IRootHLMessageModule.sol';
 import {Constants} from '../../contracts/libraries/Constants.sol';
@@ -32,7 +33,7 @@ import {IXERC20, MintLimits} from '../foundry-tests/mock/XERC20/IXERC20.sol';
 import {IPool} from 'contracts/interfaces/external/IPool.sol';
 import {TestConstants, ERC20, IUniswapV2Factory, IPoolFactory} from '../foundry-tests/utils/TestConstants.t.sol';
 
-abstract contract BaseForkFixture is Test, TestConstants {
+abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
     using SafeCast for uint256;
 
     DeployPermit2AndUnsupported public deployPermit2AndUnsupported;
@@ -52,7 +53,7 @@ abstract contract BaseForkFixture is Test, TestConstants {
     uint256 public rootStartTime; // root fork start time (set to start of epoch for simplicity)
     // creation of oUSDT is at blk 132196375
     // ica router is deployed a bit before blk 136140000
-    uint256 public rootForkBlockNumber = 136140000;
+    uint256 public rootForkBlockNumber = 146000000;
 
     // root router
     UniversalRouter public router;
@@ -77,7 +78,7 @@ abstract contract BaseForkFixture is Test, TestConstants {
     uint256 public leafStartTime; // leaf fork start time (set to start of epoch for simplicity)
     // creation of oUSDT is at blk 26601142
     // ica router is deployed a bit before blk 30540000
-    uint256 public leafForkBlockNumber = 30540000;
+    uint256 public leafForkBlockNumber = 40000000;
 
     // leaf router
     UniversalRouter public leafRouter;
@@ -153,19 +154,16 @@ abstract contract BaseForkFixture is Test, TestConstants {
     }
 
     function deployRootDependencies() public virtual {
-        // deploy root mocks
-        rootMailbox = _overwriteMailbox(OPEN_USDT_OPTIMISM_MAILBOX_ADDRESS, OPEN_USDT_OPTIMISM_ISM_ADDRESS, rootDomain);
+        // deploy root mocks — dynamically read ISM from the bridge in case it changed
+        address rootIsm = address(HypXERC20(OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS).interchainSecurityModule());
+        rootMailbox = _overwriteMailbox(OPEN_USDT_OPTIMISM_MAILBOX_ADDRESS, rootIsm, rootDomain);
     }
 
     function setUpRootChain() public virtual {
         vm.selectFork({forkId: rootId});
         deployRootDependencies();
 
-        deployPermit2AndUnsupported = new DeployPermit2AndUnsupported();
-        deployPermit2AndUnsupported.deploy();
-
-        rootPermit2 = IPermit2(deployPermit2AndUnsupported.permit2());
-        address unsupported = deployPermit2AndUnsupported.unsupported();
+        (rootPermit2, unsupported) = _deployOrReusePermit2AndUnsupported();
 
         // deploy router
         params = DeployUniversalRouter.DeploymentParameters({
@@ -216,13 +214,12 @@ abstract contract BaseForkFixture is Test, TestConstants {
     function setUpLeafChain() public virtual {
         vm.selectFork({forkId: leafId});
 
-        leafMailbox = _overwriteMailbox(OPEN_USDT_BASE_MAILBOX_ADDRESS, OPEN_USDT_BASE_ISM_ADDRESS, leafDomain);
+        // dynamically read ISM from the bridge in case it changed
+        address leafIsm = address(HypXERC20(OPEN_USDT_BASE_BRIDGE_ADDRESS).interchainSecurityModule());
+        leafMailbox = _overwriteMailbox(OPEN_USDT_BASE_MAILBOX_ADDRESS, leafIsm, leafDomain);
 
-        deployPermit2AndUnsupported = new DeployPermit2AndUnsupported();
-        deployPermit2AndUnsupported.deploy();
-
-        leafPermit2 = IPermit2(deployPermit2AndUnsupported.permit2());
-        address unsupported = deployPermit2AndUnsupported.unsupported();
+        address _unsupported;
+        (leafPermit2, _unsupported) = _deployOrReusePermit2AndUnsupported();
 
         // deploy router on base
         params = DeployUniversalRouter.DeploymentParameters({
@@ -239,7 +236,7 @@ abstract contract BaseForkFixture is Test, TestConstants {
         });
 
         deployRouter =
-            new TestDeployRouter({_params: params, _unsupported: unsupported, _permit2: address(leafPermit2)});
+            new TestDeployRouter({_params: params, _unsupported: _unsupported, _permit2: address(leafPermit2)});
         deployRouter.run();
 
         leafRouter = deployRouter.router();
@@ -269,11 +266,7 @@ abstract contract BaseForkFixture is Test, TestConstants {
 
         vm.selectFork({forkId: leafId_2});
 
-        deployPermit2AndUnsupported = new DeployPermit2AndUnsupported();
-        deployPermit2AndUnsupported.deploy();
-
-        leafPermit2_2 = IPermit2(deployPermit2AndUnsupported.permit2());
-        unsupported = deployPermit2AndUnsupported.unsupported();
+        (leafPermit2_2, _unsupported) = _deployOrReusePermit2AndUnsupported();
 
         // deploy router on mode (values copied from DeployMode.s.sol)
         params = DeployUniversalRouter.DeploymentParameters({
@@ -290,19 +283,19 @@ abstract contract BaseForkFixture is Test, TestConstants {
         });
 
         deployRouter =
-            new TestDeployRouter({_params: params, _unsupported: unsupported, _permit2: address(leafPermit2_2)});
+            new TestDeployRouter({_params: params, _unsupported: _unsupported, _permit2: address(leafPermit2_2)});
         deployRouter.run();
 
         leafRouter_2 = deployRouter.router();
 
-        unsupported = deployRouter.unsupported();
+        _unsupported = deployRouter.unsupported();
 
         // check router variables
         assertEq(address(leafRouter_2.WETH9()), address(WETH));
         assertEq(address(leafRouter_2.PERMIT2()), address(leafPermit2_2));
-        assertEq(address(leafRouter_2.UNISWAP_V2_FACTORY()), unsupported);
+        assertEq(address(leafRouter_2.UNISWAP_V2_FACTORY()), _unsupported);
         assertEq(leafRouter_2.UNISWAP_V2_PAIR_INIT_CODE_HASH(), bytes32(0));
-        assertEq(address(leafRouter_2.UNISWAP_V3_FACTORY()), unsupported);
+        assertEq(address(leafRouter_2.UNISWAP_V3_FACTORY()), _unsupported);
         assertEq(leafRouter_2.UNISWAP_V3_POOL_INIT_CODE_HASH(), bytes32(0));
         assertEq(address(leafRouter_2.VELODROME_V2_FACTORY()), 0x31832f2a97Fd20664D76Cc421207669b55CE4BC0);
         assertEq(
@@ -377,6 +370,28 @@ abstract contract BaseForkFixture is Test, TestConstants {
     function createUser(string memory name) internal returns (address payable user) {
         user = payable(makeAddr({name: name}));
         vm.deal({account: user, newBalance: TOKEN_1 * 1_000});
+    }
+
+    /// @dev Deploy Permit2 and UnsupportedProtocol, or reuse if already deployed on the fork
+    function _deployOrReusePermit2AndUnsupported()
+        internal
+        returns (IPermit2 _permit2, address _unsupported)
+    {
+        address deployer_ = 0x4994DacdB9C57A811aFfbF878D92E00EF2E5C4C2;
+        address computedPermit2 = CreateXLibrary.computeCreate3Address(PERMIT2_ENTROPY, deployer_);
+        address computedUnsupported = CreateXLibrary.computeCreate3Address(UNSUPPORTED_PROTOCOL_ENTROPY, deployer_);
+
+        if (computedPermit2.code.length > 0 && computedUnsupported.code.length > 0) {
+            // Already deployed on this fork — reuse
+            _permit2 = IPermit2(computedPermit2);
+            _unsupported = computedUnsupported;
+        } else {
+            // Deploy fresh
+            deployPermit2AndUnsupported = new DeployPermit2AndUnsupported();
+            deployPermit2AndUnsupported.deploy();
+            _permit2 = IPermit2(deployPermit2AndUnsupported.permit2());
+            _unsupported = deployPermit2AndUnsupported.unsupported();
+        }
     }
 
     /// @dev Helper function to generate commitment hashes

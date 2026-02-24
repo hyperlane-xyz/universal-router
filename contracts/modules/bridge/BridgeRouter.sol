@@ -9,6 +9,7 @@ import {StandardHookMetadata} from '@hyperlane/core/contracts/hooks/libs/Standar
 import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
 
 import {ITokenBridge} from '../../interfaces/external/ITokenBridge.sol';
+import {Quote, ITokenBridge as IHypTokenBridge} from '@hyperlane-updated/contracts/interfaces/ITokenBridge.sol';
 import {BridgeTypes} from '../../libraries/BridgeTypes.sol';
 import {Permit2Payments} from './../Permit2Payments.sol';
 
@@ -20,6 +21,7 @@ abstract contract BridgeRouter is Permit2Payments {
     error InvalidTokenAddress();
     error InvalidRecipient();
     error InvalidBridgeType(uint8 bridgeType);
+    error TokenFeeExceedsMax(uint256 tokenFee, uint256 maxTokenFee);
 
     uint256 public constant OPTIMISM_CHAIN_ID = 10;
 
@@ -31,7 +33,7 @@ abstract contract BridgeRouter is Permit2Payments {
     /// @param bridge The bridge used for the token
     /// @param amount The amount to bridge
     /// @param msgFee The fee to pay for message bridging
-    /// @param tokenFee The fee to pay for token bridging
+    /// @param maxTokenFee The maximum acceptable fee for token bridging
     /// @param domain The destination domain
     /// @param payer The address to pay for the transfer
     function bridgeToken(
@@ -42,7 +44,7 @@ abstract contract BridgeRouter is Permit2Payments {
         address bridge,
         uint256 amount,
         uint256 msgFee,
-        uint256 tokenFee,
+        uint256 maxTokenFee,
         uint32 domain,
         address payer
     ) internal {
@@ -81,15 +83,13 @@ abstract contract BridgeRouter is Permit2Payments {
         } else if (bridgeType == BridgeTypes.HYP_ERC20_COLLATERAL) {
             if (address(HypERC20Collateral(bridge).wrappedToken()) != token) revert InvalidTokenAddress();
 
-            prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: tokenFee});
+            uint256 bridgeAmount = quoteExactInputBridgeAmount(bridge, token, recipient, amount, domain);
+            uint256 tokenFee = amount - bridgeAmount;
+            if (tokenFee > maxTokenFee) revert TokenFeeExceedsMax(tokenFee, maxTokenFee);
 
-            executeHypERC20CollateralBridge({
-                bridge: bridge,
-                recipient: recipient,
-                amount: amount,
-                msgFee: msgFee,
-                domain: domain
-            });
+            prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
+
+            executeHypERC20CollateralBridge({bridge: bridge, recipient: recipient, amount: bridgeAmount, msgFee: msgFee, domain: domain});
             ERC20(token).safeApprove({to: bridge, amount: 0});
         } else {
             revert InvalidBridgeType({bridgeType: bridgeType});
@@ -151,6 +151,29 @@ abstract contract BridgeRouter is Permit2Payments {
             _recipient: TypeCasts.addressToBytes32(recipient),
             _amountOrId: amount
         });
+    }
+
+    /// @dev Computes the amount to pass to transferRemote such that bridgeAmount + fee(bridgeAmount) = amount
+    /// Assumes internal (quotes[1]) and external (quotes[2]) fees scale linearly with amount.
+    /// The IGP fee (quotes[0]) is fixed and deducted from available amount if token-denominated.
+    /// @param bridge The HypERC20Collateral bridge address
+    /// @param token The collateral token address
+    /// @param recipient The recipient address on the destination chain
+    /// @param amount The total token amount the user provides
+    /// @param domain The destination domain
+    /// @return bridgeAmount The amount to pass to transferRemote
+    function quoteExactInputBridgeAmount(
+        address bridge,
+        address token,
+        address recipient,
+        uint256 amount,
+        uint32 domain
+    ) internal view returns (uint256 bridgeAmount) {
+        bytes32 recipientBytes32 = TypeCasts.addressToBytes32(recipient);
+        Quote[] memory quotes = IHypTokenBridge(bridge).quoteTransferRemote(domain, recipientBytes32, amount);
+        uint256 igpTokenFee = (quotes[0].token == token) ? quotes[0].amount : 0;
+        uint256 linearQuotedTokens = quotes[1].amount + quotes[2].amount;
+        bridgeAmount = ((amount - igpTokenFee) * amount) / linearQuotedTokens;
     }
 
     /// @dev Moves the tokens from sender to this contract then approves the bridge
