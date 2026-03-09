@@ -18,7 +18,7 @@ contract DeployPermit2AndUnsupported is Script, Constants {
     address public unsupported;
     address public permit2;
 
-    address public deployer = 0x4994DacdB9C57A811aFfbF878D92E00EF2E5C4C2;
+    address public deployer = 0x9Bd11B31c67609Ba3772077A86cc5224e7CAE21A;
 
     ICreateX public cx = ICreateX(0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed);
 
