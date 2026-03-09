@@ -80,7 +80,7 @@ if forge script ${SCRIPT_PATH} --slow --rpc-url ${CHAIN_NAME} -vvvv; then
     
     # Determine verifier based on chain name
     case "$CHAIN_NAME" in
-        "base"|"optimism"|"fraxtal"|"celo")
+        "arbitrum"|"base"|"bsc"|"celo"|"ethereum"|"fraxtal"|"optimism"|"polygon")
             echo "Using etherscan verifier for ${CHAIN_NAME}"
             VERIFIER_ARGS="--verify --verifier etherscan"
             ;;

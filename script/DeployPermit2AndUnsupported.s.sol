@@ -24,18 +24,22 @@ contract DeployPermit2AndUnsupported is Script, Constants {
 
     // All chains from foundry.toml rpc_endpoints
     string[] public chains = [
+        'arbitrum',
         'base',
+        'bsc',
+        'celo',
+        'ethereum',
+        'fraxtal',
+        'ink',
         'lisk',
+        'metal',
         'mode',
         'optimism',
-        'fraxtal',
-        'metal',
-        'superseed',
-        'ink',
+        'polygon',
         'soneium',
+        'superseed',
         'swell',
-        'unichain',
-        'celo'
+        'unichain'
     ];
 
     function run() external {
