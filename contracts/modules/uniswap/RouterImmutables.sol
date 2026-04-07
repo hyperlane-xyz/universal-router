@@ -12,6 +12,8 @@ struct RouterParameters {
     address veloCLFactory;
     bytes32 veloV2InitCodeHash;
     bytes32 veloCLInitCodeHash;
+    address veloCLFactory2;
+    bytes32 veloCLInitCodeHash2;
 }
 
 contract RouterImmutables is IRouterImmutables {
@@ -39,6 +41,12 @@ contract RouterImmutables is IRouterImmutables {
     ///@inheritdoc IRouterImmutables
     bytes32 public immutable VELODROME_CL_POOL_INIT_CODE_HASH;
 
+    ///@inheritdoc IRouterImmutables
+    address public immutable VELODROME_CL_FACTORY_2;
+
+    ///@inheritdoc IRouterImmutables
+    bytes32 public immutable VELODROME_CL_POOL_INIT_CODE_HASH_2;
+
     constructor(RouterParameters memory params) {
         UNISWAP_V2_FACTORY = params.v2Factory;
         UNISWAP_V2_PAIR_INIT_CODE_HASH = params.pairInitCodeHash;
@@ -48,5 +56,7 @@ contract RouterImmutables is IRouterImmutables {
         VELODROME_V2_INIT_CODE_HASH = params.veloV2InitCodeHash;
         VELODROME_CL_FACTORY = params.veloCLFactory;
         VELODROME_CL_POOL_INIT_CODE_HASH = params.veloCLInitCodeHash;
+        VELODROME_CL_FACTORY_2 = params.veloCLFactory2;
+        VELODROME_CL_POOL_INIT_CODE_HASH_2 = params.veloCLInitCodeHash2;
     }
 }

@@ -46,4 +46,12 @@ library Constants {
 
     /// @dev The minimum length of an encoding that contains 2 or more pools
     uint256 internal constant MULTIPLE_V3_POOLS_MIN_LENGTH = V3_POP_OFFSET + NEXT_V3_POOL_OFFSET;
+
+    /// @dev The bitmask for the CL factory in poolParam (bit 20)
+    /// @dev 0x100000 = 0001 0000 0000 0000 0000 0000
+    uint24 internal constant CL_FACTORY_FLAG = 0x100000;
+
+    /// @dev The bitmask to get the pool parameter (bit 20 is 0, all other bits are 1)
+    /// @dev 0xEFFFFF = 1110 1111 1111 1111 1111 1111
+    uint24 internal constant CL_POOL_PARAM_MASK = ~CL_FACTORY_FLAG;
 }

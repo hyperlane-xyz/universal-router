@@ -36,7 +36,7 @@ abstract contract BaseOverrideBridge is BaseForkFixture {
     function setUp() public virtual override {
         leaf_2 = 1750; // metal chain id
         leafDomain_2 = 1000001750; // metal domain
-        leafForkBlockNumber_2 = 19050000;
+        leafForkBlockNumber_2 = 24795765;
 
         leafMailboxAddress_2 = XVELO_METAL_MAILBOX_ADDRESS;
 

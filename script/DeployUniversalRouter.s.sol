@@ -28,6 +28,8 @@ abstract contract DeployUniversalRouter is Script, Constants {
         address veloCLFactory;
         bytes32 veloV2InitCodeHash;
         bytes32 veloCLInitCodeHash;
+        address veloCLFactory2;
+        bytes32 veloCLInitCodeHash2;
     }
 
     DeploymentParameters internal params;
@@ -64,7 +66,9 @@ abstract contract DeployUniversalRouter is Script, Constants {
             veloV2Factory: mapUnsupported(params.veloV2Factory),
             veloCLFactory: mapUnsupported(params.veloCLFactory),
             veloV2InitCodeHash: params.veloV2InitCodeHash,
-            veloCLInitCodeHash: params.veloCLInitCodeHash
+            veloCLInitCodeHash: params.veloCLInitCodeHash,
+            veloCLFactory2: mapUnsupported(params.veloCLFactory2),
+            veloCLInitCodeHash2: params.veloCLInitCodeHash2
         });
 
         deploy();
@@ -79,12 +83,12 @@ abstract contract DeployUniversalRouter is Script, Constants {
     function deploy() internal virtual {
         router = UniversalRouter(
             payable(cx.deployCreate3({
-                    salt: UNIVERSAL_ROUTER_ENTROPY_V3.calculateSalt({_deployer: deployer}),
+                    salt: UNIVERSAL_ROUTER_ENTROPY_V4.calculateSalt({_deployer: deployer}),
                     initCode: abi.encodePacked(type(UniversalRouter).creationCode, abi.encode(routerParams))
                 }))
         );
 
-        checkAddress({_entropy: UNIVERSAL_ROUTER_ENTROPY_V3, _output: address(router)});
+        checkAddress({_entropy: UNIVERSAL_ROUTER_ENTROPY_V4, _output: address(router)});
     }
 
     function logParams() internal view {

@@ -15,7 +15,15 @@ contract DeployBase is DeployUniversalRouter {
             veloV2Factory: 0x420DD381b31aEf6683db6B902084cB0FFECe40Da,
             veloCLFactory: 0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A,
             veloV2InitCodeHash: 0x6f178972b07752b522a4da1c5b71af6524e8b0bd6027ccb29e5312b0e5bcdc3c,
-            veloCLInitCodeHash: 0xffb9af9ea6d9e39da47392ecc7055277b9915b8bfc9f83f105821b7791a6ae30
+            veloCLInitCodeHash: 0xffb9af9ea6d9e39da47392ecc7055277b9915b8bfc9f83f105821b7791a6ae30,
+            veloCLFactory2: 0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a,
+            veloCLInitCodeHash2: keccak256(
+                abi.encodePacked(
+                    hex'3d602d80600a3d3981f3363d3d373d3d3d363d73',
+                    0x942e97a4c6FdC38B4CD1c0298D37d81fDD8E5A16,
+                    hex'5af43d82803e903d91602b57fd5bf3'
+                )
+            )
         });
 
         outputFilename = 'base.json';

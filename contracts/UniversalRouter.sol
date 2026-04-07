@@ -20,7 +20,9 @@ contract UniversalRouter is IUniversalRouter, Dispatcher {
                 params.veloV2Factory,
                 params.veloCLFactory,
                 params.veloV2InitCodeHash,
-                params.veloCLInitCodeHash
+                params.veloCLInitCodeHash,
+                params.veloCLFactory2,
+                params.veloCLInitCodeHash2
             ))
         V4SwapRouter(params.v4PoolManager)
         PaymentsImmutables(PaymentsParameters(params.permit2, params.weth9))

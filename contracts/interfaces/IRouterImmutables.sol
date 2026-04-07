@@ -25,4 +25,10 @@ interface IRouterImmutables {
 
     /// @notice The Velodrome CLPool initcodehash
     function VELODROME_CL_POOL_INIT_CODE_HASH() external returns (bytes32);
+
+    /// @notice The address of Velodrome CL PoolFactory 2
+    function VELODROME_CL_FACTORY_2() external returns (address);
+
+    /// @notice The Velodrome CLPool 2 initcodehash
+    function VELODROME_CL_POOL_INIT_CODE_HASH_2() external returns (bytes32);
 }

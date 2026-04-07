@@ -12,6 +12,7 @@ import {RouterImmutables} from '../RouterImmutables.sol';
 import {Permit2Payments} from '../../Permit2Payments.sol';
 
 import {MaxInputAmount} from '../../../libraries/MaxInputAmount.sol';
+import {Constants} from '../../../libraries/Constants.sol';
 import {BytesLib} from './BytesLib.sol';
 import {V3Path} from './V3Path.sol';
 
@@ -184,6 +185,12 @@ abstract contract V3SwapRouter is RouterImmutables, Permit2Payments, IUniswapV3S
         (address factory, bytes32 initCodeHash) = isUni
             ? (UNISWAP_V3_FACTORY, UNISWAP_V3_POOL_INIT_CODE_HASH)
             : (VELODROME_CL_FACTORY, VELODROME_CL_POOL_INIT_CODE_HASH);
+
+        if ((poolParam & Constants.CL_FACTORY_FLAG) != 0) {
+            factory = VELODROME_CL_FACTORY_2;
+            initCodeHash = VELODROME_CL_POOL_INIT_CODE_HASH_2;
+            poolParam &= Constants.CL_POOL_PARAM_MASK;
+        }
 
         pool = address(
             uint160(
