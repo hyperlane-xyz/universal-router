@@ -18,4 +18,6 @@ struct RouterDeployParameters {
     bytes32 veloCLInitCodeHash;
     address veloCLFactory2;
     bytes32 veloCLInitCodeHash2;
+    address veloCLFactory3;
+    bytes32 veloCLInitCodeHash3;
 }

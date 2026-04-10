@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {DeployUniversalRouter} from '../DeployUniversalRouter.s.sol';
 
 contract DeploySoneium is DeployUniversalRouter {
-    function setUp() public override {
+    function setUp() public virtual override {
         params = DeploymentParameters({
             weth9: 0x4200000000000000000000000000000000000006,
             v2Factory: UNSUPPORTED_PROTOCOL,
@@ -17,7 +17,9 @@ contract DeploySoneium is DeployUniversalRouter {
             veloV2InitCodeHash: 0x558be7ee0c63546b31d0773eee1d90451bd76a0167bb89653722a2bd677c002d,
             veloCLInitCodeHash: 0x7b216153c50849f664871825fa6f22b3356cdce2436e4f48734ae2a926a4c7e5,
             veloCLFactory2: address(0),
-            veloCLInitCodeHash2: bytes32(0)
+            veloCLInitCodeHash2: bytes32(0),
+            veloCLFactory3: address(0),
+            veloCLInitCodeHash3: bytes32(0)
         });
 
         outputFilename = 'soneium.json';

@@ -186,9 +186,15 @@ abstract contract V3SwapRouter is RouterImmutables, Permit2Payments, IUniswapV3S
             ? (UNISWAP_V3_FACTORY, UNISWAP_V3_POOL_INIT_CODE_HASH)
             : (VELODROME_CL_FACTORY, VELODROME_CL_POOL_INIT_CODE_HASH);
 
-        if ((poolParam & Constants.CL_FACTORY_FLAG) != 0) {
-            factory = VELODROME_CL_FACTORY_2;
-            initCodeHash = VELODROME_CL_POOL_INIT_CODE_HASH_2;
+        uint24 factorySelector = poolParam & Constants.CL_FACTORY_SELECTOR_MASK;
+        if (factorySelector != 0) {
+            if (factorySelector == Constants.CL_FACTORY_2_FLAG) {
+                factory = VELODROME_CL_FACTORY_2;
+                initCodeHash = VELODROME_CL_POOL_INIT_CODE_HASH_2;
+            } else if (factorySelector == Constants.CL_FACTORY_3_FLAG) {
+                factory = VELODROME_CL_FACTORY_3;
+                initCodeHash = VELODROME_CL_POOL_INIT_CODE_HASH_3;
+            }
             poolParam &= Constants.CL_POOL_PARAM_MASK;
         }
 

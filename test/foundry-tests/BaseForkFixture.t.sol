@@ -181,7 +181,9 @@ abstract contract BaseForkFixture is Test, TestConstants {
             veloV2InitCodeHash: VELO_V2_INIT_CODE_HASH,
             veloCLInitCodeHash: CL_POOL_INIT_CODE_HASH,
             veloCLFactory2: address(0),
-            veloCLInitCodeHash2: bytes32(0)
+            veloCLInitCodeHash2: bytes32(0),
+            veloCLFactory3: address(0),
+            veloCLInitCodeHash3: bytes32(0)
         });
 
         deployRouter =
@@ -246,7 +248,9 @@ abstract contract BaseForkFixture is Test, TestConstants {
                     0x942e97a4c6FdC38B4CD1c0298D37d81fDD8E5A16,
                     hex'5af43d82803e903d91602b57fd5bf3'
                 )
-            )
+            ),
+            veloCLFactory3: address(0),
+            veloCLInitCodeHash3: bytes32(0)
         });
 
         deployRouter =
@@ -310,7 +314,9 @@ abstract contract BaseForkFixture is Test, TestConstants {
             veloV2InitCodeHash: leafVeloV2InitCodeHash,
             veloCLInitCodeHash: leafVeloCLInitCodeHash,
             veloCLFactory2: address(0),
-            veloCLInitCodeHash2: bytes32(0)
+            veloCLInitCodeHash2: bytes32(0),
+            veloCLFactory3: address(0),
+            veloCLInitCodeHash3: bytes32(0)
         });
 
         deployRouter =

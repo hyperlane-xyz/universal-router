@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {DeployUniversalRouter} from '../DeployUniversalRouter.s.sol';
 
 contract DeployBase is DeployUniversalRouter {
-    function setUp() public override {
+    function setUp() public virtual override {
         params = DeploymentParameters({
             weth9: 0x4200000000000000000000000000000000000006,
             v2Factory: 0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6,
@@ -13,14 +13,22 @@ contract DeployBase is DeployUniversalRouter {
             poolInitCodeHash: 0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54,
             v4PoolManager: 0x498581fF718922c3f8e6A244956aF099B2652b2b,
             veloV2Factory: 0x420DD381b31aEf6683db6B902084cB0FFECe40Da,
-            veloCLFactory: 0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A,
+            veloCLFactory: 0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a,
             veloV2InitCodeHash: 0x6f178972b07752b522a4da1c5b71af6524e8b0bd6027ccb29e5312b0e5bcdc3c,
-            veloCLInitCodeHash: 0xffb9af9ea6d9e39da47392ecc7055277b9915b8bfc9f83f105821b7791a6ae30,
-            veloCLFactory2: 0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a,
-            veloCLInitCodeHash2: keccak256(
+            veloCLInitCodeHash: keccak256(
                 abi.encodePacked(
                     hex'3d602d80600a3d3981f3363d3d373d3d3d363d73',
                     0x942e97a4c6FdC38B4CD1c0298D37d81fDD8E5A16,
+                    hex'5af43d82803e903d91602b57fd5bf3'
+                )
+            ),
+            veloCLFactory2: 0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A,
+            veloCLInitCodeHash2: 0xffb9af9ea6d9e39da47392ecc7055277b9915b8bfc9f83f105821b7791a6ae30,
+            veloCLFactory3: 0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef,
+            veloCLInitCodeHash3: keccak256(
+                abi.encodePacked(
+                    hex'3d602d80600a3d3981f3363d3d373d3d3d363d73',
+                    0xc770898522D2A9c8Da7A10D63989b6b58305B665,
                     hex'5af43d82803e903d91602b57fd5bf3'
                 )
             )

@@ -5,6 +5,7 @@ libs = ['lib']
 via_ir = true
 solc_version = '0.8.29'
 no-match-test = "testGas"
+no-match-path = "test/fork/*"
 evm_version = "cancun"
 remappings = [
   "node_modules/@hyperlane-xyz/:@openzeppelin/contracts/=node_modules/@hyperlane-xyz/core/node_modules/@openzeppelin/contracts/",

@@ -30,6 +30,8 @@ abstract contract DeployUniversalRouter is Script, Constants {
         bytes32 veloCLInitCodeHash;
         address veloCLFactory2;
         bytes32 veloCLInitCodeHash2;
+        address veloCLFactory3;
+        bytes32 veloCLInitCodeHash3;
     }
 
     DeploymentParameters internal params;
@@ -68,7 +70,9 @@ abstract contract DeployUniversalRouter is Script, Constants {
             veloV2InitCodeHash: params.veloV2InitCodeHash,
             veloCLInitCodeHash: params.veloCLInitCodeHash,
             veloCLFactory2: mapUnsupported(params.veloCLFactory2),
-            veloCLInitCodeHash2: params.veloCLInitCodeHash2
+            veloCLInitCodeHash2: params.veloCLInitCodeHash2,
+            veloCLFactory3: mapUnsupported(params.veloCLFactory3),
+            veloCLInitCodeHash3: params.veloCLInitCodeHash3
         });
 
         deploy();
