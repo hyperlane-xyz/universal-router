@@ -6,7 +6,7 @@ import {ActionConstants} from '@uniswap/v4-periphery/src/libraries/ActionConstan
 import {SafeCast} from '@openzeppelin/contracts/utils/math/SafeCast.sol';
 import {Math} from '@openzeppelin/contracts/utils/math/Math.sol';
 import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
-import {CallLib} from '@hyperlane-updated/contracts/middleware/libs/Call.sol';
+import {CallLib} from '@hyperlane/core/contracts/middleware/libs/Call.sol';
 import {HypXERC20} from '@hyperlane/core/contracts/token/extensions/HypXERC20.sol';
 import {TestIsm} from '@hyperlane/core/contracts/test/TestIsm.sol';
 import {TestPostDispatchHook} from '@hyperlane/core/contracts/test/TestPostDispatchHook.sol';
@@ -20,13 +20,14 @@ import {Dispatcher} from '../../contracts/base/Dispatcher.sol';
 import {Payments} from '../../contracts/modules/Payments.sol';
 import {CreateXLibrary} from '../../contracts/libraries/CreateXLibrary.sol';
 import {Constants as ScriptConstants} from '../../script/Constants.sol';
-import {ITokenBridge} from '../../contracts/interfaces/external/ITokenBridge.sol';
+import {IXVeloTokenBridge} from '../../contracts/interfaces/external/IXVeloTokenBridge.sol';
 import {IRootHLMessageModule} from '../../contracts/interfaces/external/IRootHLMessageModule.sol';
 import {Constants} from '../../contracts/libraries/Constants.sol';
 import {Commands} from '../../contracts/libraries/Commands.sol';
 
 import {Mailbox, MultichainMockMailbox} from '../foundry-tests/mock/MultichainMockMailbox.sol';
 import {Users} from '../foundry-tests/utils/Users.sol';
+import {TestOwner} from '../foundry-tests/utils/TestOwner.sol';
 import {TestDeployRouter, DeployUniversalRouter} from '../foundry-tests/utils/TestDeployRouter.sol';
 import {DeployPermit2AndUnsupported} from '../../script/DeployPermit2AndUnsupported.s.sol';
 import {IXERC20, MintLimits} from '../foundry-tests/mock/XERC20/IXERC20.sol';
@@ -52,8 +53,8 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
     uint256 public rootId; // root fork id (used by foundry)
     uint256 public rootStartTime; // root fork start time (set to start of epoch for simplicity)
     // creation of oUSDT is at blk 132196375
-    // ica router is deployed a bit before blk 136140000
-    uint256 public rootForkBlockNumber = 146000000;
+    // ica router is deployed a bit before blk 137100000
+    uint256 public rootForkBlockNumber = 137100000;
 
     // root router
     UniversalRouter public router;
@@ -65,7 +66,7 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
     HypXERC20 public rootOpenUsdtTokenBridge = HypXERC20(OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS);
 
     IXERC20 public rootXVelo = IXERC20(XVELO_ADDRESS);
-    ITokenBridge public rootXVeloTokenBridge = ITokenBridge(XVELO_TOKEN_BRIDGE_ADDRESS);
+    IXVeloTokenBridge public rootXVeloTokenBridge = IXVeloTokenBridge(XVELO_TOKEN_BRIDGE_ADDRESS);
 
     // root-only mocks
     MultichainMockMailbox public rootMailbox;
@@ -77,8 +78,8 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
     uint256 public leafId; // leaf fork id (used by foundry)
     uint256 public leafStartTime; // leaf fork start time (set to start of epoch for simplicity)
     // creation of oUSDT is at blk 26601142
-    // ica router is deployed a bit before blk 30540000
-    uint256 public leafForkBlockNumber = 40000000;
+    // ica router is deployed a bit before blk 31440000
+    uint256 public leafForkBlockNumber = 31440000;
 
     // leaf router
     UniversalRouter public leafRouter;
@@ -114,7 +115,7 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
 
     // leaf contracts
     IXERC20 public leafXVelo = IXERC20(XVELO_ADDRESS);
-    ITokenBridge public leafXVeloTokenBridge = ITokenBridge(XVELO_TOKEN_BRIDGE_ADDRESS);
+    IXVeloTokenBridge public leafXVeloTokenBridge = IXVeloTokenBridge(XVELO_TOKEN_BRIDGE_ADDRESS);
     // leaf-only mocks
     MultichainMockMailbox public leafMailbox_2;
 
@@ -176,7 +177,11 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
             veloV2Factory: address(VELO_V2_FACTORY),
             veloCLFactory: address(CL_FACTORY),
             veloV2InitCodeHash: VELO_V2_INIT_CODE_HASH,
-            veloCLInitCodeHash: CL_POOL_INIT_CODE_HASH
+            veloCLInitCodeHash: CL_POOL_INIT_CODE_HASH,
+            veloCLFactory2: address(0),
+            veloCLInitCodeHash2: bytes32(0),
+            veloCLFactory3: address(0),
+            veloCLInitCodeHash3: bytes32(0)
         });
 
         deployRouter =
@@ -232,7 +237,17 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
             veloV2Factory: 0x420DD381b31aEf6683db6B902084cB0FFECe40Da,
             veloCLFactory: 0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A,
             veloV2InitCodeHash: 0x6f178972b07752b522a4da1c5b71af6524e8b0bd6027ccb29e5312b0e5bcdc3c,
-            veloCLInitCodeHash: 0xffb9af9ea6d9e39da47392ecc7055277b9915b8bfc9f83f105821b7791a6ae30
+            veloCLInitCodeHash: 0xffb9af9ea6d9e39da47392ecc7055277b9915b8bfc9f83f105821b7791a6ae30,
+            veloCLFactory2: 0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a,
+            veloCLInitCodeHash2: keccak256(
+                abi.encodePacked(
+                    hex'3d602d80600a3d3981f3363d3d373d3d3d363d73',
+                    0x942e97a4c6FdC38B4CD1c0298D37d81fDD8E5A16,
+                    hex'5af43d82803e903d91602b57fd5bf3'
+                )
+            ),
+            veloCLFactory3: address(0),
+            veloCLInitCodeHash3: bytes32(0)
         });
 
         deployRouter =
@@ -263,6 +278,17 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
             leafRouter.VELODROME_CL_POOL_INIT_CODE_HASH(),
             0xffb9af9ea6d9e39da47392ecc7055277b9915b8bfc9f83f105821b7791a6ae30
         );
+        assertEq(address(leafRouter.VELODROME_CL_FACTORY_2()), 0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a);
+        assertEq(
+            leafRouter.VELODROME_CL_POOL_INIT_CODE_HASH_2(),
+            keccak256(
+                abi.encodePacked(
+                    hex'3d602d80600a3d3981f3363d3d373d3d3d363d73',
+                    0x942e97a4c6FdC38B4CD1c0298D37d81fDD8E5A16,
+                    hex'5af43d82803e903d91602b57fd5bf3'
+                )
+            )
+        );
 
         vm.selectFork({forkId: leafId_2});
 
@@ -279,7 +305,11 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
             veloV2Factory: leafVeloV2Factory,
             veloCLFactory: leafVeloCLFactory,
             veloV2InitCodeHash: leafVeloV2InitCodeHash,
-            veloCLInitCodeHash: leafVeloCLInitCodeHash
+            veloCLInitCodeHash: leafVeloCLInitCodeHash,
+            veloCLFactory2: address(0),
+            veloCLInitCodeHash2: bytes32(0),
+            veloCLFactory3: address(0),
+            veloCLInitCodeHash3: bytes32(0)
         });
 
         deployRouter =
@@ -328,8 +358,7 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
         // for HypXERC20
         vm.prank(rootOpenUsdtTokenBridge.owner());
         rootOpenUsdtTokenBridge.enrollRemoteRouter({
-            _domain: leafDomain,
-            _router: _addressToBytes32(address(leafOpenUsdtTokenBridge))
+            _domain: leafDomain, _router: _addressToBytes32(address(leafOpenUsdtTokenBridge))
         });
 
         rootMailbox.addRemoteMailbox({_domain: leafDomain_2, _mailbox: leafMailbox_2});
@@ -344,8 +373,7 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
         // for HypXERC20
         vm.prank(leafOpenUsdtTokenBridge.owner());
         leafOpenUsdtTokenBridge.enrollRemoteRouter({
-            _domain: rootDomain,
-            _router: _addressToBytes32(address(rootOpenUsdtTokenBridge))
+            _domain: rootDomain, _router: _addressToBytes32(address(rootOpenUsdtTokenBridge))
         });
 
         vm.selectFork({forkId: leafId_2});
@@ -368,7 +396,7 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
     }
 
     function createUser(string memory name) internal returns (address payable user) {
-        user = payable(makeAddr({name: name}));
+        user = payable(new TestOwner());
         vm.deal({account: user, newBalance: TOKEN_1 * 1_000});
     }
 

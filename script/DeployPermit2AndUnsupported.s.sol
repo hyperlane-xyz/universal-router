@@ -64,19 +64,25 @@ contract DeployPermit2AndUnsupported is Script, Constants {
     }
 
     function deployPermit2() internal virtual {
-        permit2 = cx.deployCreate3({
-            salt: PERMIT2_ENTROPY.calculateSalt({_deployer: deployer}),
-            initCode: abi.encodePacked(type(Permit2).creationCode)
-        });
+        permit2 = PERMIT2_ENTROPY.computeCreate3Address({_deployer: deployer});
+        if (permit2.code.length == 0) {
+            permit2 = cx.deployCreate3({
+                salt: PERMIT2_ENTROPY.calculateSalt({_deployer: deployer}),
+                initCode: abi.encodePacked(type(Permit2).creationCode)
+            });
+        }
 
         checkAddress({_entropy: PERMIT2_ENTROPY, _output: permit2});
     }
 
     function deployUnsupported() internal virtual {
-        unsupported = cx.deployCreate3({
-            salt: UNSUPPORTED_PROTOCOL_ENTROPY.calculateSalt({_deployer: deployer}),
-            initCode: abi.encodePacked(type(UnsupportedProtocol).creationCode)
-        });
+        unsupported = UNSUPPORTED_PROTOCOL_ENTROPY.computeCreate3Address({_deployer: deployer});
+        if (unsupported.code.length == 0) {
+            unsupported = cx.deployCreate3({
+                salt: UNSUPPORTED_PROTOCOL_ENTROPY.calculateSalt({_deployer: deployer}),
+                initCode: abi.encodePacked(type(UnsupportedProtocol).creationCode)
+            });
+        }
 
         checkAddress({_entropy: UNSUPPORTED_PROTOCOL_ENTROPY, _output: unsupported});
     }

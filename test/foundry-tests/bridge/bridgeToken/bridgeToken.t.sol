@@ -159,7 +159,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             true
         );
 
-        vm.expectRevert(ITokenBridge.ZeroAmount.selector);
+        vm.expectRevert(IXVeloTokenBridge.ZeroAmount.selector);
         router.execute{value: feeAmount}(commands, inputs);
     }
 

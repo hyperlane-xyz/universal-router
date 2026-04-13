@@ -27,7 +27,7 @@ jobs:
       - name: Set up node
         uses: useblacksmith/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install Yarn
         run: npm install -g yarn
