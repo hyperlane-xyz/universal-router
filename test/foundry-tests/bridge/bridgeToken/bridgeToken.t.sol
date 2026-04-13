@@ -125,7 +125,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             true
         );
 
-        vm.expectRevert(BridgeRouter.InvalidTokenAddress.selector);
+        vm.expectRevert();
         router.execute{value: feeAmount}(commands, inputs);
     }
 
@@ -203,7 +203,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
     }
 
     function test_WhenTokenIsNotTheBridgeToken() external whenBasicValidationsPass whenBridgeTypeIsHYP_XERC20 {
-        // It should revert with {InvalidTokenAddress}
+        // It should revert — the bridge's transferRemote will fail on wrong token
         inputs[0] = abi.encode(
             uint8(BridgeTypes.HYP_XERC20),
             ActionConstants.MSG_SENDER,
@@ -216,7 +216,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
             true
         );
 
-        vm.expectRevert(BridgeRouter.InvalidTokenAddress.selector);
+        vm.expectRevert();
         router.execute{value: feeAmount}(commands, inputs);
     }
 

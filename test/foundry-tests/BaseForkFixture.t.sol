@@ -19,7 +19,6 @@ import {UniversalRouter} from '../../contracts/UniversalRouter.sol';
 import {Dispatcher} from '../../contracts/base/Dispatcher.sol';
 import {Payments} from '../../contracts/modules/Payments.sol';
 import {CreateXLibrary} from '../../contracts/libraries/CreateXLibrary.sol';
-import {Constants as ScriptConstants} from '../../script/Constants.sol';
 import {IXVeloTokenBridge} from '../../contracts/interfaces/external/IXVeloTokenBridge.sol';
 import {IRootHLMessageModule} from '../../contracts/interfaces/external/IRootHLMessageModule.sol';
 import {Constants} from '../../contracts/libraries/Constants.sol';
@@ -34,7 +33,7 @@ import {IXERC20, MintLimits} from '../foundry-tests/mock/XERC20/IXERC20.sol';
 import {IPool} from 'contracts/interfaces/external/IPool.sol';
 import {TestConstants, ERC20, IUniswapV2Factory, IPoolFactory} from '../foundry-tests/utils/TestConstants.t.sol';
 
-abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
+abstract contract BaseForkFixture is Test, TestConstants {
     using SafeCast for uint256;
 
     DeployPermit2AndUnsupported public deployPermit2AndUnsupported;
@@ -155,16 +154,19 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
     }
 
     function deployRootDependencies() public virtual {
-        // deploy root mocks — dynamically read ISM from the bridge in case it changed
-        address rootIsm = address(HypXERC20(OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS).interchainSecurityModule());
-        rootMailbox = _overwriteMailbox(OPEN_USDT_OPTIMISM_MAILBOX_ADDRESS, rootIsm, rootDomain);
+        // deploy root mocks
+        rootMailbox = _overwriteMailbox(OPEN_USDT_OPTIMISM_MAILBOX_ADDRESS, OPEN_USDT_OPTIMISM_ISM_ADDRESS, rootDomain);
     }
 
     function setUpRootChain() public virtual {
         vm.selectFork({forkId: rootId});
         deployRootDependencies();
 
-        (rootPermit2, unsupported) = _deployOrReusePermit2AndUnsupported();
+        deployPermit2AndUnsupported = new DeployPermit2AndUnsupported();
+        deployPermit2AndUnsupported.deploy();
+
+        rootPermit2 = IPermit2(deployPermit2AndUnsupported.permit2());
+        address unsupported = deployPermit2AndUnsupported.unsupported();
 
         // deploy router
         params = DeployUniversalRouter.DeploymentParameters({
@@ -219,12 +221,13 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
     function setUpLeafChain() public virtual {
         vm.selectFork({forkId: leafId});
 
-        // dynamically read ISM from the bridge in case it changed
-        address leafIsm = address(HypXERC20(OPEN_USDT_BASE_BRIDGE_ADDRESS).interchainSecurityModule());
-        leafMailbox = _overwriteMailbox(OPEN_USDT_BASE_MAILBOX_ADDRESS, leafIsm, leafDomain);
+        leafMailbox = _overwriteMailbox(OPEN_USDT_BASE_MAILBOX_ADDRESS, OPEN_USDT_BASE_ISM_ADDRESS, leafDomain);
 
-        address _unsupported;
-        (leafPermit2, _unsupported) = _deployOrReusePermit2AndUnsupported();
+        deployPermit2AndUnsupported = new DeployPermit2AndUnsupported();
+        deployPermit2AndUnsupported.deploy();
+
+        leafPermit2 = IPermit2(deployPermit2AndUnsupported.permit2());
+        address unsupported = deployPermit2AndUnsupported.unsupported();
 
         // deploy router on base
         params = DeployUniversalRouter.DeploymentParameters({
@@ -251,7 +254,7 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
         });
 
         deployRouter =
-            new TestDeployRouter({_params: params, _unsupported: _unsupported, _permit2: address(leafPermit2)});
+            new TestDeployRouter({_params: params, _unsupported: unsupported, _permit2: address(leafPermit2)});
         deployRouter.run();
 
         leafRouter = deployRouter.router();
@@ -292,7 +295,11 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
 
         vm.selectFork({forkId: leafId_2});
 
-        (leafPermit2_2, _unsupported) = _deployOrReusePermit2AndUnsupported();
+        deployPermit2AndUnsupported = new DeployPermit2AndUnsupported();
+        deployPermit2AndUnsupported.deploy();
+
+        leafPermit2_2 = IPermit2(deployPermit2AndUnsupported.permit2());
+        unsupported = deployPermit2AndUnsupported.unsupported();
 
         // deploy router on mode (values copied from DeployMode.s.sol)
         params = DeployUniversalRouter.DeploymentParameters({
@@ -313,19 +320,19 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
         });
 
         deployRouter =
-            new TestDeployRouter({_params: params, _unsupported: _unsupported, _permit2: address(leafPermit2_2)});
+            new TestDeployRouter({_params: params, _unsupported: unsupported, _permit2: address(leafPermit2_2)});
         deployRouter.run();
 
         leafRouter_2 = deployRouter.router();
 
-        _unsupported = deployRouter.unsupported();
+        unsupported = deployRouter.unsupported();
 
         // check router variables
         assertEq(address(leafRouter_2.WETH9()), address(WETH));
         assertEq(address(leafRouter_2.PERMIT2()), address(leafPermit2_2));
-        assertEq(address(leafRouter_2.UNISWAP_V2_FACTORY()), _unsupported);
+        assertEq(address(leafRouter_2.UNISWAP_V2_FACTORY()), unsupported);
         assertEq(leafRouter_2.UNISWAP_V2_PAIR_INIT_CODE_HASH(), bytes32(0));
-        assertEq(address(leafRouter_2.UNISWAP_V3_FACTORY()), _unsupported);
+        assertEq(address(leafRouter_2.UNISWAP_V3_FACTORY()), unsupported);
         assertEq(leafRouter_2.UNISWAP_V3_POOL_INIT_CODE_HASH(), bytes32(0));
         assertEq(address(leafRouter_2.VELODROME_V2_FACTORY()), 0x31832f2a97Fd20664D76Cc421207669b55CE4BC0);
         assertEq(
@@ -398,28 +405,6 @@ abstract contract BaseForkFixture is Test, TestConstants, ScriptConstants {
     function createUser(string memory name) internal returns (address payable user) {
         user = payable(new TestOwner());
         vm.deal({account: user, newBalance: TOKEN_1 * 1_000});
-    }
-
-    /// @dev Deploy Permit2 and UnsupportedProtocol, or reuse if already deployed on the fork
-    function _deployOrReusePermit2AndUnsupported()
-        internal
-        returns (IPermit2 _permit2, address _unsupported)
-    {
-        address deployer_ = 0x4994DacdB9C57A811aFfbF878D92E00EF2E5C4C2;
-        address computedPermit2 = CreateXLibrary.computeCreate3Address(PERMIT2_ENTROPY, deployer_);
-        address computedUnsupported = CreateXLibrary.computeCreate3Address(UNSUPPORTED_PROTOCOL_ENTROPY, deployer_);
-
-        if (computedPermit2.code.length > 0 && computedUnsupported.code.length > 0) {
-            // Already deployed on this fork — reuse
-            _permit2 = IPermit2(computedPermit2);
-            _unsupported = computedUnsupported;
-        } else {
-            // Deploy fresh
-            deployPermit2AndUnsupported = new DeployPermit2AndUnsupported();
-            deployPermit2AndUnsupported.deploy();
-            _permit2 = IPermit2(deployPermit2AndUnsupported.permit2());
-            _unsupported = deployPermit2AndUnsupported.unsupported();
-        }
     }
 
     /// @dev Helper function to generate commitment hashes
