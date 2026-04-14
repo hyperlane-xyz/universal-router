@@ -1,1577 +1,504 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-import {BridgeTypes} from '../../../../contracts/libraries/BridgeTypes.sol';
-import {BridgeRouter} from '../../../../contracts/modules/bridge/BridgeRouter.sol';
+import {ActionConstants} from '@uniswap/v4-periphery/src/libraries/ActionConstants.sol';
+import {QuotedCalls} from '@hyperlane/core/contracts/token/QuotedCalls.sol';
 import {Commands} from '../../../../contracts/libraries/Commands.sol';
 import {Constants} from '../../../../contracts/libraries/Constants.sol';
-import {IDomainRegistry} from '../../../../contracts/interfaces/external/IDomainRegistry.sol';
 import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
 import './BaseOverrideBridge.sol';
 
+library QuotedCallsCommands {
+    uint256 internal constant PERMIT2_TRANSFER_FROM = 0x02;
+    uint256 internal constant TRANSFER_FROM = 0x03;
+    uint256 internal constant TRANSFER_REMOTE = 0x04;
+    uint256 internal constant SWEEP = 0x08;
+}
+
 contract BridgeTokenTest is BaseOverrideBridge {
+    uint256 internal constant QUOTED_CALLS_CONTRACT_BALANCE =
+        0x8000000000000000000000000000000000000000000000000000000000000000;
+    uint256 internal constant QUOTED_CALLS_BRIDGE_EXACT_IN =
+        0x8000000000000000000000000000000000000000000000000000000000000001;
+
     uint256 public openUsdtBridgeAmount = USDC_1 * 1000;
     uint256 public openUsdtInitialBal = openUsdtBridgeAmount * 2;
-
-    uint256 public xVeloBridgeAmount = TOKEN_1 * 1000;
-    uint256 public xVeloInitialBal = xVeloBridgeAmount * 2;
-
-    uint256 mockDomainId = 111;
-
-    bytes public commands = abi.encodePacked(bytes1(uint8(Commands.BRIDGE_TOKEN)));
-    bytes[] public inputs;
-
-    /// @dev Fixed fee used for x-chain message quotes
-    uint256 public constant MESSAGE_FEE = 1 ether / 10_000; // 0.0001 ETH
-    uint256 leftoverETH = MESSAGE_FEE / 2;
-    uint256 feeAmount = MESSAGE_FEE;
-
-    // Bridge amounts for HypERC20Collateral tests (using deployed USDC warp route)
     uint256 public usdcBridgeAmount = 1000 * USDC_1;
     uint256 public usdcInitialBal = usdcBridgeAmount * 2;
+
+    uint256 public constant MESSAGE_FEE = 1 ether / 10_000;
+
+    uint32 internal constant MOCK_DOMAIN = 111;
 
     function setUp() public override {
         super.setUp();
 
         deal(address(users.alice), 1 ether);
         deal(OPEN_USDT_ADDRESS, users.alice, openUsdtInitialBal);
-        deal(VELO_ADDRESS, users.alice, xVeloBridgeAmount);
-
-        vm.selectFork(leafId_2);
-        deal(XVELO_ADDRESS, users.alice, xVeloInitialBal);
-
-        vm.selectFork(rootId);
-        deal(VELO_ADDRESS, users.alice, xVeloInitialBal);
-
-        // Fund alice with USDC for HypERC20Collateral tests (deployed USDC warp route on forked Optimism)
         deal(OPTIMISM_USDC_ADDRESS, users.alice, usdcInitialBal);
 
-        // Fund USDC bridge on Base with USDC liquidity for cross-chain payouts
         vm.selectFork(leafId);
         deal(BASE_USDC_ADDRESS, USDC_BASE_BRIDGE, usdcInitialBal);
         vm.selectFork(rootId);
-
-        inputs = new bytes[](1);
 
         vm.startPrank({msgSender: users.alice});
     }
 
     function test_WhenRecipientIsZeroAddress() external {
-        // It should revert with {InvalidRecipient}
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            address(0), //recipient
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            openUsdtBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            leafDomain,
-            true
-        );
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypXERC20Bridge({
+            usePermit2: false,
+            pullAmount: openUsdtBridgeAmount,
+            bridgeAmount: openUsdtBridgeAmount,
+            bridgeValue: MESSAGE_FEE,
+            domain: leafDomain,
+            recipient: bytes32(0),
+            token: OPEN_USDT_ADDRESS,
+            sweepETH: false
+        });
 
-        vm.expectRevert(BridgeRouter.InvalidRecipient.selector);
-        router.execute{value: feeAmount}(commands, inputs);
+        ERC20(OPEN_USDT_ADDRESS).approve(address(router), type(uint256).max);
+        vm.expectRevert();
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
     }
 
     function test_WhenMessageFeeIsSmallerThanContractBalance() external {
-        // It should revert with {InvalidETH}
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            openUsdtBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            leafDomain,
-            true
-        );
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypXERC20Bridge({
+            usePermit2: false,
+            pullAmount: openUsdtBridgeAmount,
+            bridgeAmount: openUsdtBridgeAmount,
+            bridgeValue: MESSAGE_FEE,
+            domain: leafDomain,
+            recipient: TypeCasts.addressToBytes32(users.alice),
+            token: OPEN_USDT_ADDRESS,
+            sweepETH: false
+        });
 
         ERC20(OPEN_USDT_ADDRESS).approve(address(router), type(uint256).max);
-        vm.expectRevert(); // OutOfFunds
-        router.execute{value: feeAmount - 1}(commands, inputs);
-    }
-
-    function test_RevertWhen_BridgeIsZeroAddress() external {
-        // It should revert with {InvalidBridgeType}
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            address(0), //bridge
-            openUsdtBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            leafDomain,
-            true
-        );
-
         vm.expectRevert();
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_RevertWhen_TokenIsZeroAddress() external {
-        // It should revert
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            address(0),
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            openUsdtBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            leafDomain,
-            true
-        );
-
-        vm.expectRevert();
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_RevertWhen_AmountIsZero() external {
-        // It should revert
-        // testing both bridge
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            0, // amount
-            feeAmount,
-            0, // tokenFee
-            leafDomain,
-            true
-        );
-
-        vm.expectRevert(bytes('MintLimits: replenish amount cannot be 0'));
-        router.execute{value: feeAmount}(commands, inputs);
-
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            0, // amount
-            feeAmount,
-            0, // tokenFee
-            leafDomain_2,
-            true
-        );
-
-        vm.expectRevert(IXVeloTokenBridge.ZeroAmount.selector);
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenBridgeTypeIsInvalid() external {
-        // It should revert with {InvalidBridgeType}
-        inputs[0] = abi.encode(
-            0,
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            openUsdtBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            leafDomain,
-            true
-        );
-
-        vm.expectRevert(abi.encodeWithSelector(BridgeRouter.InvalidBridgeType.selector, 0));
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    modifier whenBasicValidationsPass() {
-        _;
-    }
-
-    modifier whenBridgeTypeIsHYP_XERC20() {
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            openUsdtBridgeAmount,
-            feeAmount + leftoverETH,
-            0, // tokenFee
-            leafDomain,
-            true
-        );
-
-        TestPostDispatchHook(address(rootMailbox.requiredHook())).setFee(MESSAGE_FEE);
-        _;
-    }
-
-    function test_WhenTokenIsNotTheBridgeToken() external whenBasicValidationsPass whenBridgeTypeIsHYP_XERC20 {
-        // It should revert — the bridge's transferRemote will fail on wrong token
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            openUsdtBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            leafDomain,
-            true
-        );
-
-        vm.expectRevert();
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenNoTokenApprovalWasGiven() external whenBasicValidationsPass whenBridgeTypeIsHYP_XERC20 {
-        // It should revert with {AllowanceExpired}
-
-        vm.expectRevert(abi.encodeWithSelector(IAllowanceTransfer.AllowanceExpired.selector, 0));
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    modifier whenUsingPermit2() {
-        ERC20(OPEN_USDT_ADDRESS).approve(address(rootPermit2), type(uint256).max);
-        rootPermit2.approve(OPEN_USDT_ADDRESS, address(router), type(uint160).max, type(uint48).max);
-        _;
-    }
-
-    function test_WhenDomainIsZero() external whenBasicValidationsPass whenBridgeTypeIsHYP_XERC20 whenUsingPermit2 {
-        // It should revert with "No router enrolled for domain: 0"
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            openUsdtBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            0, // domain
-            true
-        );
-
-        vm.expectRevert(bytes('No router enrolled for domain: 0'));
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenDomainIsNotRegistered()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_XERC20
-        whenUsingPermit2
-    {
-        // It should revert with "No router enrolled for domain: 111"
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            openUsdtBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            mockDomainId,
-            true
-        );
-
-        vm.expectRevert(bytes('No router enrolled for domain: 111'));
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenDomainIsTheSameAsSourceDomain()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_XERC20
-        whenUsingPermit2
-    {
-        // It should revert with "No router enrolled for domain: 10"
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            openUsdtBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            rootDomain,
-            true
-        );
-
-        vm.expectRevert(bytes('No router enrolled for domain: 10'));
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_RevertWhen_FeeIsInsufficient()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_XERC20
-        whenUsingPermit2
-    {
-        // It should revert
-        vm.expectRevert(); // OutOfFunds
-        router.execute{value: 0}(commands, inputs);
-    }
-
-    modifier whenAllChecksPass() {
-        _;
-    }
-
-    modifier whenAmountIsContractBalanceHYP_XERC20() {
-        commands = abi.encodePacked(bytes1(uint8(Commands.TRANSFER_FROM)), bytes1(uint8(Commands.BRIDGE_TOKEN)));
-        inputs = new bytes[](2);
-        inputs[0] = abi.encode(OPEN_USDT_ADDRESS, address(router), Constants.TOTAL_BALANCE);
-        inputs[1] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            ActionConstants.CONTRACT_BALANCE,
-            feeAmount + leftoverETH,
-            0, // tokenFee
-            leafDomain,
-            false
-        );
-        _;
-    }
-
-    function test_WhenAmountIsEqualToContractBalanceConstant()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_XERC20
-        whenUsingPermit2
-        whenAllChecksPass
-        whenAmountIsContractBalanceHYP_XERC20
-    {
-        // It should bridge the total router balance to destination chain
-        // It should return excess fee if any
-        // It should leave no dangling ERC20 approvals
-        // It should emit {UniversalRouterBridge} event
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtInitialBal, leafDomain
-        );
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        _assertOUsdt({_bridgeAmount: openUsdtInitialBal});
-
-        // Assert excess fee was refunded
-        assertApproxEqAbs(balanceAfter, balanceBefore - feeAmount, 1e14, 'Excess fee not refunded');
-        // Assert no dangling ERC20 approvals
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS), 0);
-    }
-
-    function test_WhenAmountIsNotEqualToContractBalanceConstant()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_XERC20
-        whenUsingPermit2
-        whenAllChecksPass
-    {
-        // It should bridge the amount to destination chain
-        // It should return excess fee if any
-        // It should leave no dangling ERC20 approvals
-        // It should emit {UniversalRouterBridge} event
-
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtBridgeAmount, leafDomain
-        );
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        _assertOUsdt({_bridgeAmount: openUsdtBridgeAmount});
-
-        // Assert excess fee was refunded
-        assertApproxEqAbs(balanceAfter, balanceBefore - feeAmount, 1e14, 'Excess fee not refunded');
-        // Assert no dangling ERC20 approvals
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS), 0);
-    }
-
-    modifier whenUsingDirectApproval() {
-        ERC20(OPEN_USDT_ADDRESS).approve(address(router), type(uint256).max);
-        _;
-    }
-
-    function test_WhenDomainIsZero_()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_XERC20
-        whenUsingDirectApproval
-    {
-        // It should revert with "No router enrolled for domain: 0"
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            openUsdtBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            0, // domain
-            true
-        );
-
-        vm.expectRevert(bytes('No router enrolled for domain: 0'));
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenDomainIsNotRegistered_()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_XERC20
-        whenUsingDirectApproval
-    {
-        // It should revert with "No router enrolled for domain: 111"
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            openUsdtBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            mockDomainId,
-            true
-        );
-
-        vm.expectRevert(bytes('No router enrolled for domain: 111'));
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenDomainIsTheSameAsSourceDomain_()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_XERC20
-        whenUsingDirectApproval
-    {
-        // It should revert with "No router enrolled for domain: 10"
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            openUsdtBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            rootDomain,
-            true
-        );
-
-        vm.expectRevert(bytes('No router enrolled for domain: 10'));
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_RevertWhen_FeeIsInsufficient_()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_XERC20
-        whenUsingDirectApproval
-    {
-        // It should revert
-        vm.expectRevert(); // OutOfFunds
-        router.execute{value: 0}(commands, inputs);
-    }
-
-    modifier whenAllChecksPass_() {
-        _;
-    }
-
-    function test_WhenAmountIsEqualToContractBalanceConstant_()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_XERC20
-        whenUsingDirectApproval
-        whenAllChecksPass_
-        whenAmountIsContractBalanceHYP_XERC20
-    {
-        // It should bridge the total router balance to destination chain
-        // It should return excess fee if any
-        // It should leave no dangling ERC20 approvals
-        // It should emit {UniversalRouterBridge} event
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtInitialBal, leafDomain
-        );
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        _assertOUsdt({_bridgeAmount: openUsdtInitialBal});
-
-        // Assert excess fee was refunded
-        assertApproxEqAbs(balanceAfter, balanceBefore - feeAmount, 1e14, 'Excess fee not refunded');
-        // Assert no dangling ERC20 approvals
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS), 0);
-    }
-
-    function test_WhenAmountIsNotEqualToContractBalanceConstant_()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_XERC20
-        whenUsingDirectApproval
-        whenAllChecksPass_
-    {
-        // It should bridge the amount to destination chain
-        // It should return excess fee if any
-        // It should leave no dangling ERC20 approvals
-        // It should emit {UniversalRouterBridge} event
-
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtBridgeAmount, leafDomain
-        );
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        _assertOUsdt({_bridgeAmount: openUsdtBridgeAmount});
-
-        // Assert excess fee was refunded
-        assertApproxEqAbs(balanceAfter, balanceBefore - feeAmount, 1e14, 'Excess fee not refunded');
-        // Assert no dangling ERC20 approvals
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS), 0);
-    }
-
-    modifier whenBridgeTypeIsXVELO() {
-        _;
-    }
-
-    modifier whenDestinationChainIsMETAL() {
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            feeAmount + leftoverETH,
-            0, // tokenFee
-            leafDomain_2,
-            true
-        );
-
-        (, uint96 gasOverhead) = InterchainGasPaymaster(ROOT_IGP).destinationGasConfigs(leaf_2);
-        uint256 gasLimit = rootXVeloTokenBridge.GAS_LIMIT() + gasOverhead;
-        uint256 exchangeRate = 15000000000;
-        uint256 tokenExchangeRate = 1e10;
-
-        /// @dev Calculate gas price so that quote is `MESSAGE_FEE`
-        uint256 requiredPrice = (MESSAGE_FEE * tokenExchangeRate) / (gasLimit * exchangeRate);
-
-        // Mock the gas oracle response for domain 100001750
-        bytes memory mockResponse = abi.encode(uint128(exchangeRate), uint128(requiredPrice));
-        vm.mockCall(
-            ROOT_STORAGE_GAS_ORACLE,
-            abi.encodeWithSignature('getExchangeRateAndGasPrice(uint32)', leafDomain_2),
-            mockResponse
-        );
-        _;
-    }
-
-    function test_WhenTokenIsNotTheBridgeToken_()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-    {
-        // It should revert with {InvalidTokenAddress}
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            address(rootXVeloTokenBridge),
-            1000, // openUSDT is 6 decimals so can't use xVeloBridgeAmount
-            feeAmount,
-            0, // tokenFee
-            leafDomain_2,
-            true
-        );
-
-        vm.expectRevert(BridgeRouter.InvalidTokenAddress.selector);
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenNoTokenApprovalWasGiven_()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-    {
-        // It should revert with {AllowanceExpired}
-        vm.expectRevert(abi.encodeWithSelector(IAllowanceTransfer.AllowanceExpired.selector, 0));
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    modifier whenUsingPermit2_() {
-        ERC20(VELO_ADDRESS).approve(address(rootPermit2), type(uint256).max);
-        rootPermit2.approve(VELO_ADDRESS, address(router), type(uint160).max, type(uint48).max);
-        _;
-    }
-
-    function test_WhenDomainIsZero__()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-        whenUsingPermit2_
-    {
-        // It should revert with {NotRegistered}
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            0, // domain
-            true
-        );
-
-        vm.expectRevert(IDomainRegistry.NotRegistered.selector);
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenDomainIsNotRegistered__()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-        whenUsingPermit2_
-    {
-        // It should revert with {NotRegistered}
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            mockDomainId,
-            true
-        );
-
-        vm.expectRevert(IDomainRegistry.NotRegistered.selector);
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenDomainIsTheSameAsSourceDomain__()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-        whenUsingPermit2_
-    {
-        // It should revert with {NotRegistered}
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            rootDomain,
-            true
-        );
-
-        vm.expectRevert(IDomainRegistry.NotRegistered.selector);
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenFeeIsInsufficient__()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-        whenUsingPermit2_
-    {
-        // It should revert with "IGP: insufficient interchain gas payment"
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            0, // fee amount
-            0, // tokenFee
-            leafDomain_2,
-            true
-        );
-
-        vm.expectRevert('IGP: insufficient interchain gas payment');
-        router.execute{value: 0}(commands, inputs);
-    }
-
-    modifier whenAllChecksPass__() {
-        _;
-    }
-
-    modifier whenAmountIsContractBalanceXVELORoot() {
-        commands = abi.encodePacked(bytes1(uint8(Commands.TRANSFER_FROM)), bytes1(uint8(Commands.BRIDGE_TOKEN)));
-        inputs = new bytes[](2);
-        inputs[0] = abi.encode(VELO_ADDRESS, address(router), Constants.TOTAL_BALANCE);
-        inputs[1] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            ActionConstants.CONTRACT_BALANCE,
-            feeAmount + leftoverETH,
-            0, // tokenFee
-            leafDomain_2,
-            false
-        );
-        _;
-    }
-
-    function test_WhenAmountIsEqualToContractBalanceConstant__()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-        whenUsingPermit2_
-        whenAllChecksPass__
-        whenAmountIsContractBalanceXVELORoot
-    {
-        // It should bridge the total router balance to destination chain
-        // It should return excess fee if any
-        // It should leave no dangling ERC20 approvals
-        // It should emit {UniversalRouterBridge} event
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, VELO_ADDRESS, xVeloInitialBal, leafDomain_2);
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        _assertXVelo({_bridgeAmount: xVeloInitialBal});
-
-        // Assert excess fee was refunded
-        // @dev Allow delta to account for rounding
-        assertApproxEqAbs(balanceAfter, balanceBefore - feeAmount, 1e14, 'Excess fee not refunded');
-        // Assert no dangling ERC20 approvals
-        vm.selectFork({forkId: rootId});
-        assertEq(ERC20(VELO_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(VELO_ADDRESS).allowance(address(router), address(rootXVeloTokenBridge)), 0);
-    }
-
-    function test_WhenAmountIsNotEqualToContractBalanceConstant__()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-        whenUsingPermit2_
-        whenAllChecksPass__
-    {
-        // It should bridge the amount to destination chain
-        // It should return excess fee if any
-        // It should leave no dangling ERC20 approvals
-        // It should emit {UniversalRouterBridge} event
-
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, VELO_ADDRESS, xVeloBridgeAmount, leafDomain_2);
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        _assertXVelo({_bridgeAmount: xVeloBridgeAmount});
-
-        // Assert excess fee was refunded
-        // @dev Allow delta to account for rounding
-        assertApproxEqAbs(balanceAfter, balanceBefore - feeAmount, 1e14, 'Excess fee not refunded');
-        // Assert no dangling ERC20 approvals
-        vm.selectFork({forkId: rootId});
-        assertEq(ERC20(VELO_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(VELO_ADDRESS).allowance(address(router), address(rootXVeloTokenBridge)), 0);
-    }
-
-    modifier whenUsingDirectApproval_() {
-        ERC20(VELO_ADDRESS).approve(address(router), type(uint256).max);
-        _;
-    }
-
-    function test_WhenDomainIsZero___()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-        whenUsingDirectApproval_
-    {
-        // It should revert with {NotRegistered}
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            0, // domain
-            true
-        );
-
-        vm.expectRevert(IDomainRegistry.NotRegistered.selector);
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenDomainIsNotRegistered___()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-        whenUsingDirectApproval_
-    {
-        // It should revert with {NotRegistered}
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            mockDomainId,
-            true
-        );
-
-        vm.expectRevert(IDomainRegistry.NotRegistered.selector);
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenDomainIsTheSameAsSourceDomain___()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-        whenUsingDirectApproval_
-    {
-        // It should revert with {NotRegistered}
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            feeAmount,
-            0, // tokenFee
-            rootDomain,
-            true
-        );
-
-        vm.expectRevert(IDomainRegistry.NotRegistered.selector);
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenFeeIsInsufficient___()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-        whenUsingDirectApproval_
-    {
-        // It should revert with "IGP: insufficient interchain gas payment"
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            0, // fee amount
-            0, // tokenFee
-            leafDomain_2,
-            true
-        );
-
-        vm.expectRevert('IGP: insufficient interchain gas payment');
-        router.execute{value: 0}(commands, inputs);
-    }
-
-    modifier whenAllChecksPass___() {
-        _;
-    }
-
-    function test_WhenAmountIsEqualToContractBalanceConstant___()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-        whenUsingDirectApproval_
-        whenAllChecksPass___
-        whenAmountIsContractBalanceXVELORoot
-    {
-        // It should bridge the total router balance to destination chain
-        // It should return excess fee if any
-        // It should leave no dangling ERC20 approvals
-        // It should emit {UniversalRouterBridge} event
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, VELO_ADDRESS, xVeloInitialBal, leafDomain_2);
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        _assertXVelo({_bridgeAmount: xVeloInitialBal});
-
-        // Assert excess fee was refunded
-        // @dev Allow delta to account for rounding
-        assertApproxEqAbs(balanceAfter, balanceBefore - feeAmount, 1e14, 'Excess fee not refunded');
-        // Assert no dangling ERC20 approvals
-        vm.selectFork({forkId: rootId});
-        assertEq(ERC20(VELO_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(VELO_ADDRESS).allowance(address(router), address(rootXVeloTokenBridge)), 0);
-    }
-
-    function test_WhenAmountIsNotEqualToContractBalanceConstant___()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-        whenUsingDirectApproval_
-        whenAllChecksPass___
-    {
-        // It should bridge the amount to destination chain
-        // It should return excess fee if any
-        // It should leave no dangling ERC20 approvals
-        // It should emit {UniversalRouterBridge} event
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, VELO_ADDRESS, xVeloBridgeAmount, leafDomain_2);
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        _assertXVelo({_bridgeAmount: xVeloBridgeAmount});
-
-        // Assert excess fee was refunded
-        // @dev Allow delta to account for rounding
-        assertApproxEqAbs(balanceAfter, balanceBefore - feeAmount, 1e14, 'Excess fee not refunded');
-        // Assert no dangling ERC20 approvals
-        vm.selectFork({forkId: rootId});
-        assertEq(ERC20(VELO_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(VELO_ADDRESS).allowance(address(router), address(rootXVeloTokenBridge)), 0);
-    }
-
-    modifier whenDestinationChainIsOPTIMISM() {
-        vm.selectFork(leafId_2);
-
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            XVELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            feeAmount + leftoverETH,
-            0, // tokenFee
-            rootDomain,
-            true
-        );
-
-        (, uint96 gasOverhead) = InterchainGasPaymaster(LEAF_IGP_2).destinationGasConfigs(rootDomain);
-        uint256 gasLimit = leafXVeloTokenBridge.GAS_LIMIT() + gasOverhead;
-        uint256 exchangeRate = 15000000000;
-        uint256 tokenExchangeRate = 1e10;
-
-        /// @dev Calculate gas price so that quote is `MESSAGE_FEE`
-        uint256 requiredPrice = (MESSAGE_FEE * tokenExchangeRate) / (gasLimit * exchangeRate);
-
-        // Mock the gas oracle response for domain 10
-        bytes memory mockResponse = abi.encode(uint128(exchangeRate), uint128(requiredPrice));
-        vm.mockCall(
-            LEAF_STORAGE_GAS_ORACLE,
-            abi.encodeWithSignature('getExchangeRateAndGasPrice(uint32)', rootDomain),
-            mockResponse
-        );
-        _;
-    }
-
-    function test_WhenTokenIsNotTheBridgeToken__()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsOPTIMISM
-    {
-        // It should revert with {InvalidTokenAddress}
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            address(rootXVeloTokenBridge),
-            1000, // openUSDT is 6 decimals so can't use xVeloBridgeAmount
-            feeAmount,
-            0, // tokenFee
-            rootDomain,
-            true
-        );
-
-        vm.expectRevert(BridgeRouter.InvalidTokenAddress.selector);
-        leafRouter_2.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_WhenNoTokenApprovalWasGiven__()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsOPTIMISM
-    {
-        // It should revert with {AllowanceExpired}
-        vm.expectRevert(abi.encodeWithSelector(IAllowanceTransfer.AllowanceExpired.selector, 0));
-        leafRouter_2.execute{value: feeAmount}(commands, inputs);
-    }
-
-    modifier whenUsingPermit2__() {
-        ERC20(XVELO_ADDRESS).approve(address(leafPermit2_2), type(uint256).max);
-        leafPermit2_2.approve(XVELO_ADDRESS, address(leafRouter_2), type(uint160).max, type(uint48).max);
-        _;
-    }
-
-    function test_WhenFeeIsInsufficient____()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsOPTIMISM
-        whenUsingPermit2__
-    {
-        // It should revert with "IGP: insufficient interchain gas payment"
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            XVELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            0, // fee amount
-            0, // tokenFee
-            rootDomain,
-            true
-        );
-
-        vm.expectRevert('IGP: insufficient interchain gas payment');
-        leafRouter_2.execute{value: 0}(commands, inputs);
-    }
-
-    function test_WhenAllChecksPass____()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsOPTIMISM
-        whenUsingPermit2__
-    {
-        // It should bridge the amount to destination chain
-        // It should return excess fee if any
-        // It should leave no dangling ERC20 approvals
-        // It should emit {UniversalRouterBridge} event
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, XVELO_ADDRESS, xVeloBridgeAmount, rootDomain);
-        leafRouter_2.execute{value: feeAmount + leftoverETH}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        _assertXVelo({_bridgeAmount: xVeloBridgeAmount});
-
-        // Assert excess fee was refunded
-        // @dev Allow delta to account for rounding
-        assertApproxEqAbs(balanceAfter, balanceBefore - feeAmount, 1e14, 'Excess fee not refunded');
-        // Assert no dangling ERC20 approvals
-        vm.selectFork({forkId: leafId_2});
-        assertEq(ERC20(XVELO_ADDRESS).allowance(address(leafRouter_2), address(leafPermit2_2)), 0);
-        assertEq(ERC20(XVELO_ADDRESS).allowance(address(leafRouter_2), address(leafXVeloTokenBridge)), 0);
-    }
-
-    modifier whenUsingDirectApproval__() {
-        ERC20(XVELO_ADDRESS).approve(address(leafRouter_2), type(uint256).max);
-        _;
-    }
-
-    function test_WhenFeeIsInsufficient_____()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsOPTIMISM
-        whenUsingDirectApproval__
-    {
-        // It should revert with "IGP: insufficient interchain gas payment"
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            XVELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            0, // fee amount
-            0, // tokenFee
-            rootDomain,
-            true
-        );
-
-        vm.expectRevert('IGP: insufficient interchain gas payment');
-        leafRouter_2.execute{value: 0}(commands, inputs);
-    }
-
-    function test_WhenAllChecksPass_____()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsOPTIMISM
-        whenUsingDirectApproval__
-    {
-        // It should bridge the amount to destination chain
-        // It should return excess fee if any
-        // It should leave no dangling ERC20 approvals
-        // It should emit {UniversalRouterBridge} event
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(address(leafRouter_2));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, XVELO_ADDRESS, xVeloBridgeAmount, rootDomain);
-        leafRouter_2.execute{value: feeAmount + leftoverETH}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        _assertXVelo({_bridgeAmount: xVeloBridgeAmount});
-
-        // Assert excess fee was refunded
-        // @dev Allow delta to account for rounding
-        assertApproxEqAbs(balanceAfter, balanceBefore - feeAmount, 1e14, 'Excess fee not refunded');
-        // Assert no dangling ERC20 approvals
-        vm.selectFork({forkId: leafId_2});
-        assertEq(ERC20(XVELO_ADDRESS).allowance(address(leafRouter_2), address(leafPermit2_2)), 0);
-        assertEq(ERC20(XVELO_ADDRESS).allowance(address(leafRouter_2), address(leafXVeloTokenBridge)), 0);
-    }
-
-    function test_HypXERC20ChainedBridgeTokenFlow() external whenBridgeTypeIsHYP_XERC20 whenUsingDirectApproval {
-        // Encode chained bridge command after transferFrom, so that payer is Router
-        commands = abi.encodePacked(bytes1(uint8(Commands.TRANSFER_FROM)), bytes1(uint8(Commands.BRIDGE_TOKEN)));
-        inputs = new bytes[](2);
-        inputs[0] = abi.encode(OPEN_USDT_ADDRESS, address(router), openUsdtBridgeAmount);
-        inputs[1] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            openUsdtBridgeAmount,
-            feeAmount + leftoverETH,
-            0, // tokenFee
-            leafDomain,
-            false // payer is router
-        );
-
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(OPEN_USDT_ADDRESS);
-        emit ERC20.Transfer(users.alice, address(router), openUsdtBridgeAmount);
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtBridgeAmount, leafDomain
-        );
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        _assertOUsdt({_bridgeAmount: openUsdtBridgeAmount});
-
-        // Assert excess fee was refunded
-        assertApproxEqAbs(balanceAfter, balanceBefore - feeAmount, 1e14, 'Excess fee not refunded');
-        // Assert no dangling ERC20 approvals
-        vm.selectFork({forkId: rootId});
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(address(router), OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS), 0);
-    }
-
-    function test_VeloChainedBridgeTokenFlow()
-        external
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsMETAL
-        whenUsingDirectApproval_
-    {
-        // Encode chained bridge command after transferFrom, so that payer is Router
-        commands = abi.encodePacked(bytes1(uint8(Commands.TRANSFER_FROM)), bytes1(uint8(Commands.BRIDGE_TOKEN)));
-        inputs = new bytes[](2);
-        inputs[0] = abi.encode(VELO_ADDRESS, address(router), xVeloBridgeAmount);
-        inputs[1] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            feeAmount + leftoverETH,
-            0, // tokenFee
-            leafDomain_2,
-            false // payer is router
-        );
-
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(VELO_ADDRESS);
-        emit ERC20.Transfer(users.alice, address(router), xVeloBridgeAmount);
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, VELO_ADDRESS, xVeloBridgeAmount, leafDomain_2);
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        _assertXVelo({_bridgeAmount: xVeloBridgeAmount});
-
-        // Assert excess fee was refunded
-        // @dev Allow delta to account for rounding
-        assertApproxEqAbs(balanceAfter, balanceBefore - feeAmount, 1e14, 'Excess fee not refunded');
-        // Assert no dangling ERC20 approvals
-        vm.selectFork({forkId: rootId});
-        assertEq(ERC20(VELO_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(VELO_ADDRESS).allowance(address(router), address(rootXVeloTokenBridge)), 0);
-    }
-
-    function test_xVeloChainedBridgeTokenFlow()
-        external
-        whenBridgeTypeIsXVELO
-        whenDestinationChainIsOPTIMISM
-        whenUsingDirectApproval__
-    {
-        // Encode chained bridge command after transferFrom, so that payer is Router
-        commands = abi.encodePacked(bytes1(uint8(Commands.TRANSFER_FROM)), bytes1(uint8(Commands.BRIDGE_TOKEN)));
-        inputs = new bytes[](2);
-        inputs[0] = abi.encode(XVELO_ADDRESS, address(leafRouter_2), xVeloBridgeAmount);
-        inputs[1] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            XVELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            xVeloBridgeAmount,
-            feeAmount + leftoverETH,
-            0, // tokenFee
-            rootDomain,
-            false // payer is router
-        );
-
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(XVELO_ADDRESS);
-        emit ERC20.Transfer(users.alice, address(leafRouter_2), xVeloBridgeAmount);
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, XVELO_ADDRESS, xVeloBridgeAmount, rootDomain);
-        leafRouter_2.execute{value: feeAmount + leftoverETH}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        _assertXVelo({_bridgeAmount: xVeloBridgeAmount});
-
-        // Assert excess fee was refunded
-        // @dev Allow delta to account for rounding
-        assertApproxEqAbs(balanceAfter, balanceBefore - feeAmount, 1e14, 'Excess fee not refunded');
-        // Assert no dangling ERC20 approvals
-        vm.selectFork({forkId: leafId_2});
-        assertEq(ERC20(XVELO_ADDRESS).allowance(address(leafRouter_2), address(leafPermit2_2)), 0);
-        assertEq(ERC20(XVELO_ADDRESS).allowance(address(leafRouter_2), address(leafXVeloTokenBridge)), 0);
-    }
-
-    function _assertOUsdt(uint256 _bridgeAmount) private {
-        // Verify token transfer occurred
-        assertEq(
-            ERC20(OPEN_USDT_ADDRESS).balanceOf(users.alice),
-            openUsdtInitialBal - _bridgeAmount,
-            'oUSDT balance should only contain leftover on root after bridge'
-        );
-
-        vm.selectFork(leafId);
-        leafMailbox.processNextInboundMessage();
-
-        assertEq(
-            ERC20(OPEN_USDT_ADDRESS).balanceOf(users.alice),
-            _bridgeAmount,
-            'oUSDT balance should match the bridge amount on leaf after bridge'
-        );
-    }
-
-    /// HYP_ERC20_COLLATERAL TESTS ///
-
-    modifier whenBridgeTypeIsHYP_ERC20_COLLATERAL() {
-        // Uses deployed USDC HypERC20Collateral bridge on forked Optimism (5 bps fee for EVM-to-EVM)
-        // No mocking needed — quoteTransferRemote hits the real on-chain contract
-
-        // Add SWEEP command after BRIDGE_TOKEN to refund excess ETH
-        commands = abi.encodePacked(bytes1(uint8(Commands.BRIDGE_TOKEN)), bytes1(uint8(Commands.SWEEP)));
-        inputs = new bytes[](2);
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
-            ActionConstants.MSG_SENDER,
-            OPTIMISM_USDC_ADDRESS,
-            USDC_OPTIMISM_BRIDGE,
-            usdcBridgeAmount, // amount
-            feeAmount, // msgFee (all goes to mock mailbox hooks)
-            usdcBridgeAmount, // maxTokenFee (generous cap for 5 bps fee)
-            leafDomain,
-            true
-        );
-        // SWEEP ETH back to caller (address(0) = ETH, MSG_SENDER = caller, 0 = no minimum)
-        inputs[1] = abi.encode(Constants.ETH, ActionConstants.MSG_SENDER, 0);
-        _;
-    }
-
-    function test_HypERC20Collateral_WhenTokenIsNotTheBridgeToken()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_ERC20_COLLATERAL
-    {
-        // It should revert with {InvalidTokenAddress}
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS, // wrong token
-            USDC_OPTIMISM_BRIDGE,
-            usdcBridgeAmount,
-            feeAmount,
-            usdcBridgeAmount,
-            leafDomain,
-            true
-        );
-
-        vm.expectRevert(BridgeRouter.InvalidTokenAddress.selector);
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    function test_HypERC20Collateral_WhenNoTokenApprovalWasGiven()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_ERC20_COLLATERAL
-    {
-        // It should revert with {AllowanceExpired}
-        vm.expectRevert(abi.encodeWithSelector(IAllowanceTransfer.AllowanceExpired.selector, 0));
-        router.execute{value: feeAmount}(commands, inputs);
-    }
-
-    modifier whenUsingPermit2ForHypERC20Collateral() {
-        ERC20(OPTIMISM_USDC_ADDRESS).approve(address(rootPermit2), type(uint256).max);
-        rootPermit2.approve(OPTIMISM_USDC_ADDRESS, address(router), type(uint160).max, type(uint48).max);
-        _;
-    }
-
-    function test_HypERC20Collateral_WhenUsingPermit2()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_ERC20_COLLATERAL
-        whenUsingPermit2ForHypERC20Collateral
-    {
-        // It should bridge the amount to destination chain
-        // It should return excess fee if any
-        // It should leave no dangling ERC20 approvals
-        // It should emit {UniversalRouterBridge} event
-
-        uint256 balanceBefore = address(users.alice).balance;
-
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPTIMISM_USDC_ADDRESS, usdcBridgeAmount, leafDomain
-        );
-        router.execute{value: feeAmount}(commands, inputs);
-
-        uint256 balanceAfter = address(users.alice).balance;
-
-        // Verify token transfer occurred — alice paid full amount (sendAmount + fee)
-        assertEq(
-            ERC20(OPTIMISM_USDC_ADDRESS).balanceOf(users.alice),
-            usdcInitialBal - usdcBridgeAmount,
-            'USDC balance should decrease by bridge amount'
-        );
-
-        // Assert ETH fee was consumed (sent to mock mailbox hooks)
-        assertEq(balanceAfter, balanceBefore - feeAmount, 'ETH fee not consumed');
-        // Assert no dangling ERC20 approvals
-        assertEq(ERC20(OPTIMISM_USDC_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(OPTIMISM_USDC_ADDRESS).allowance(address(router), USDC_OPTIMISM_BRIDGE), 0);
-
-        // Verify destination balance — process message on leaf chain and check recipient received USDC
-        // The 5 bps fee is deducted, so recipient gets sendAmount < usdcBridgeAmount
-        vm.selectFork(leafId);
-        leafMailbox.processNextInboundMessage();
-
-        uint256 leafBalance = ERC20(BASE_USDC_ADDRESS).balanceOf(users.alice);
-        // sendAmount = amount^2 / quoteAmount, with 5 bps fee: ~999.500 USDC for 1000 USDC input
-        assertGt(leafBalance, 0, 'Should receive USDC on leaf');
-        assertLt(leafBalance, usdcBridgeAmount, 'Should receive less than full amount due to fee');
-        // 5 bps = 0.05%, so fee ~ 0.5 USDC on 1000 USDC
-        assertApproxEqAbs(leafBalance, usdcBridgeAmount, USDC_1, 'Fee should be approximately 5 bps');
-    }
+        router.execute{value: MESSAGE_FEE - 1}(commands, inputs);
+    }
+
+    function test_WhenTokenIsNotTheBridgeToken() external {
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypXERC20Bridge({
+            usePermit2: false,
+            pullAmount: openUsdtBridgeAmount,
+            bridgeAmount: openUsdtBridgeAmount,
+            bridgeValue: MESSAGE_FEE,
+            domain: leafDomain,
+            recipient: TypeCasts.addressToBytes32(users.alice),
+            token: OPTIMISM_USDC_ADDRESS,
+            sweepETH: false
+        });
 
-    modifier whenUsingDirectApprovalForHypERC20Collateral() {
         ERC20(OPTIMISM_USDC_ADDRESS).approve(address(router), type(uint256).max);
-        _;
+        vm.expectRevert();
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
     }
 
-    function test_HypERC20Collateral_WhenUsingDirectApproval()
-        external
-        whenBasicValidationsPass
-        whenBridgeTypeIsHYP_ERC20_COLLATERAL
-        whenUsingDirectApprovalForHypERC20Collateral
-    {
-        // It should bridge the amount to destination chain
-        // It should return excess fee if any
-        // It should leave no dangling ERC20 approvals
-        // It should emit {UniversalRouterBridge} event
+    function test_WhenNoTokenApprovalWasGiven() external {
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypXERC20Bridge({
+            usePermit2: false,
+            pullAmount: openUsdtBridgeAmount,
+            bridgeAmount: openUsdtBridgeAmount,
+            bridgeValue: MESSAGE_FEE,
+            domain: leafDomain,
+            recipient: TypeCasts.addressToBytes32(users.alice),
+            token: OPEN_USDT_ADDRESS,
+            sweepETH: false
+        });
 
-        uint256 balanceBefore = address(users.alice).balance;
+        vm.expectRevert();
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
+    }
 
-        vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPTIMISM_USDC_ADDRESS, usdcBridgeAmount, leafDomain
-        );
-        router.execute{value: feeAmount}(commands, inputs);
+    function test_WhenNoPermit2ApprovalWasGiven() external {
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypXERC20Bridge({
+            usePermit2: true,
+            pullAmount: openUsdtBridgeAmount,
+            bridgeAmount: openUsdtBridgeAmount,
+            bridgeValue: MESSAGE_FEE,
+            domain: leafDomain,
+            recipient: TypeCasts.addressToBytes32(users.alice),
+            token: OPEN_USDT_ADDRESS,
+            sweepETH: false
+        });
 
-        uint256 balanceAfter = address(users.alice).balance;
+        vm.expectRevert(abi.encodeWithSelector(IAllowanceTransfer.AllowanceExpired.selector, 0));
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
+    }
 
-        // Verify token transfer occurred — alice paid full amount (sendAmount + fee)
-        assertEq(
-            ERC20(OPTIMISM_USDC_ADDRESS).balanceOf(users.alice),
-            usdcInitialBal - usdcBridgeAmount,
-            'USDC balance should decrease by bridge amount'
-        );
+    function test_WhenDomainIsZero() external {
+        _approveOpenUsdtWithPermit2();
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypXERC20Bridge({
+            usePermit2: true,
+            pullAmount: openUsdtBridgeAmount,
+            bridgeAmount: openUsdtBridgeAmount,
+            bridgeValue: MESSAGE_FEE,
+            domain: 0,
+            recipient: TypeCasts.addressToBytes32(users.alice),
+            token: OPEN_USDT_ADDRESS,
+            sweepETH: false
+        });
 
-        // Assert ETH fee was consumed (sent to mock mailbox hooks)
-        assertEq(balanceAfter, balanceBefore - feeAmount, 'ETH fee not consumed');
-        // Assert no dangling ERC20 approvals
-        assertEq(ERC20(OPTIMISM_USDC_ADDRESS).allowance(address(router), address(rootPermit2)), 0);
-        assertEq(ERC20(OPTIMISM_USDC_ADDRESS).allowance(address(router), USDC_OPTIMISM_BRIDGE), 0);
+        vm.expectRevert(bytes('No router enrolled for domain: 0'));
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
+    }
 
-        // Verify destination balance — process message on leaf chain and check recipient received USDC
+    function test_WhenDomainIsNotRegistered() external {
+        _approveOpenUsdtWithPermit2();
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypXERC20Bridge({
+            usePermit2: true,
+            pullAmount: openUsdtBridgeAmount,
+            bridgeAmount: openUsdtBridgeAmount,
+            bridgeValue: MESSAGE_FEE,
+            domain: MOCK_DOMAIN,
+            recipient: TypeCasts.addressToBytes32(users.alice),
+            token: OPEN_USDT_ADDRESS,
+            sweepETH: false
+        });
+
+        vm.expectRevert(bytes('No router enrolled for domain: 111'));
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
+    }
+
+    function test_WhenDomainIsTheSameAsSourceDomain() external {
+        _approveOpenUsdtWithPermit2();
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypXERC20Bridge({
+            usePermit2: true,
+            pullAmount: openUsdtBridgeAmount,
+            bridgeAmount: openUsdtBridgeAmount,
+            bridgeValue: MESSAGE_FEE,
+            domain: rootDomain,
+            recipient: TypeCasts.addressToBytes32(users.alice),
+            token: OPEN_USDT_ADDRESS,
+            sweepETH: false
+        });
+
+        vm.expectRevert(bytes('No router enrolled for domain: 10'));
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
+    }
+
+    function test_RevertWhen_FeeIsInsufficient() external {
+        _approveOpenUsdtWithPermit2();
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypXERC20Bridge({
+            usePermit2: true,
+            pullAmount: openUsdtBridgeAmount,
+            bridgeAmount: openUsdtBridgeAmount,
+            bridgeValue: MESSAGE_FEE,
+            domain: leafDomain,
+            recipient: TypeCasts.addressToBytes32(users.alice),
+            token: OPEN_USDT_ADDRESS,
+            sweepETH: false
+        });
+
+        vm.expectRevert();
+        router.execute(commands, inputs);
+    }
+
+    function test_WhenAmountIsEqualToContractBalanceConstant_Permit2() external {
+        _approveOpenUsdtWithPermit2();
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypXERC20Bridge({
+            usePermit2: true,
+            pullAmount: openUsdtInitialBal,
+            bridgeAmount: QUOTED_CALLS_CONTRACT_BALANCE,
+            bridgeValue: MESSAGE_FEE,
+            domain: leafDomain,
+            recipient: TypeCasts.addressToBytes32(users.alice),
+            token: OPEN_USDT_ADDRESS,
+            sweepETH: true
+        });
+
+        uint256 balanceBefore = users.alice.balance;
+        router.execute{value: MESSAGE_FEE + MESSAGE_FEE / 2}(commands, inputs);
+        assertApproxEqAbs(users.alice.balance, balanceBefore - MESSAGE_FEE, 1e14);
+        _assertOpenUsdtBridged(openUsdtInitialBal);
+    }
+
+    function test_WhenAmountIsNotEqualToContractBalanceConstant_Permit2() external {
+        _approveOpenUsdtWithPermit2();
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypXERC20Bridge({
+            usePermit2: true,
+            pullAmount: openUsdtBridgeAmount,
+            bridgeAmount: openUsdtBridgeAmount,
+            bridgeValue: MESSAGE_FEE,
+            domain: leafDomain,
+            recipient: TypeCasts.addressToBytes32(users.alice),
+            token: OPEN_USDT_ADDRESS,
+            sweepETH: true
+        });
+
+        uint256 balanceBefore = users.alice.balance;
+        router.execute{value: MESSAGE_FEE + MESSAGE_FEE / 2}(commands, inputs);
+        assertApproxEqAbs(users.alice.balance, balanceBefore - MESSAGE_FEE, 1e14);
+        _assertOpenUsdtBridged(openUsdtBridgeAmount);
+    }
+
+    function test_WhenAmountIsEqualToContractBalanceConstant_DirectApproval() external {
+        ERC20(OPEN_USDT_ADDRESS).approve(address(router), type(uint256).max);
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypXERC20Bridge({
+            usePermit2: false,
+            pullAmount: openUsdtInitialBal,
+            bridgeAmount: QUOTED_CALLS_CONTRACT_BALANCE,
+            bridgeValue: MESSAGE_FEE,
+            domain: leafDomain,
+            recipient: TypeCasts.addressToBytes32(users.alice),
+            token: OPEN_USDT_ADDRESS,
+            sweepETH: true
+        });
+
+        uint256 balanceBefore = users.alice.balance;
+        router.execute{value: MESSAGE_FEE + MESSAGE_FEE / 2}(commands, inputs);
+        assertApproxEqAbs(users.alice.balance, balanceBefore - MESSAGE_FEE, 1e14);
+        _assertOpenUsdtBridged(openUsdtInitialBal);
+    }
+
+    function test_WhenAmountIsNotEqualToContractBalanceConstant_DirectApproval() external {
+        ERC20(OPEN_USDT_ADDRESS).approve(address(router), type(uint256).max);
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypXERC20Bridge({
+            usePermit2: false,
+            pullAmount: openUsdtBridgeAmount,
+            bridgeAmount: openUsdtBridgeAmount,
+            bridgeValue: MESSAGE_FEE,
+            domain: leafDomain,
+            recipient: TypeCasts.addressToBytes32(users.alice),
+            token: OPEN_USDT_ADDRESS,
+            sweepETH: true
+        });
+
+        uint256 balanceBefore = users.alice.balance;
+        router.execute{value: MESSAGE_FEE + MESSAGE_FEE / 2}(commands, inputs);
+        assertApproxEqAbs(users.alice.balance, balanceBefore - MESSAGE_FEE, 1e14);
+        _assertOpenUsdtBridged(openUsdtBridgeAmount);
+    }
+
+    function test_HypERC20Collateral_WhenTokenIsNotTheBridgeToken() external {
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypErc20CollateralBridge({
+            usePermit2: false,
+            token: VELO_ADDRESS,
+            sweepETH: true
+        });
+
+        vm.expectRevert();
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
+    }
+
+    function test_HypERC20Collateral_WhenNoTokenApprovalWasGiven() external {
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypErc20CollateralBridge({
+            usePermit2: true,
+            token: OPTIMISM_USDC_ADDRESS,
+            sweepETH: true
+        });
+
+        vm.expectRevert(abi.encodeWithSelector(IAllowanceTransfer.AllowanceExpired.selector, 0));
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
+    }
+
+    function test_HypERC20Collateral_WhenUsingPermit2() external {
+        _approveUsdcWithPermit2();
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypErc20CollateralBridge({
+            usePermit2: true,
+            token: OPTIMISM_USDC_ADDRESS,
+            sweepETH: true
+        });
+
+        uint256 balanceBefore = users.alice.balance;
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
+        assertEq(users.alice.balance, balanceBefore - MESSAGE_FEE);
+        assertEq(ERC20(OPTIMISM_USDC_ADDRESS).balanceOf(users.alice), usdcInitialBal - usdcBridgeAmount);
+
         vm.selectFork(leafId);
         leafMailbox.processNextInboundMessage();
 
         uint256 leafBalance = ERC20(BASE_USDC_ADDRESS).balanceOf(users.alice);
-        assertGt(leafBalance, 0, 'Should receive USDC on leaf');
-        assertLt(leafBalance, usdcBridgeAmount, 'Should receive less than full amount due to fee');
-        assertApproxEqAbs(leafBalance, usdcBridgeAmount, USDC_1, 'Fee should be approximately 5 bps');
+        assertGt(leafBalance, 0);
+        assertLt(leafBalance, usdcBridgeAmount);
+        assertApproxEqAbs(leafBalance, usdcBridgeAmount, USDC_1);
     }
 
-    function testGas_HypERC20CollateralBridgePermit2() public whenBridgeTypeIsHYP_ERC20_COLLATERAL {
-        ERC20(OPTIMISM_USDC_ADDRESS).approve(address(rootPermit2), type(uint256).max);
-        rootPermit2.approve(OPTIMISM_USDC_ADDRESS, address(router), type(uint160).max, type(uint48).max);
+    function test_HypERC20Collateral_WhenUsingDirectApproval() external {
+        ERC20(OPTIMISM_USDC_ADDRESS).approve(address(router), type(uint256).max);
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypErc20CollateralBridge({
+            usePermit2: false,
+            token: OPTIMISM_USDC_ADDRESS,
+            sweepETH: true
+        });
 
-        router.execute{value: feeAmount}(commands, inputs);
+        uint256 balanceBefore = users.alice.balance;
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
+        assertEq(users.alice.balance, balanceBefore - MESSAGE_FEE);
+        assertEq(ERC20(OPTIMISM_USDC_ADDRESS).balanceOf(users.alice), usdcInitialBal - usdcBridgeAmount);
+
+        vm.selectFork(leafId);
+        leafMailbox.processNextInboundMessage();
+
+        uint256 leafBalance = ERC20(BASE_USDC_ADDRESS).balanceOf(users.alice);
+        assertGt(leafBalance, 0);
+        assertLt(leafBalance, usdcBridgeAmount);
+        assertApproxEqAbs(leafBalance, usdcBridgeAmount, USDC_1);
+    }
+
+    function test_HypERC20Collateral_WhenUsingBridgeExactInSentinelAfterSwap() external {
+        uint256 amountIn = 10 ether;
+        uint256 amountOutMin = 3e6;
+
+        bytes memory commands =
+            abi.encodePacked(bytes1(uint8(Commands.V3_SWAP_EXACT_IN)), bytes1(uint8(Commands.QUOTED_CALLS)));
+        bytes[] memory inputs = new bytes[](2);
+        inputs[0] = abi.encode(
+            ActionConstants.ADDRESS_THIS,
+            amountIn,
+            amountOutMin,
+            abi.encodePacked(address(OP), FEE, address(WETH), FEE, address(USDC)),
+            true,
+            true
+        );
+
+        bytes memory quotedCommands = abi.encodePacked(bytes1(uint8(QuotedCallsCommands.TRANSFER_REMOTE)));
+        bytes[] memory quotedInputs = new bytes[](1);
+        quotedInputs[0] = abi.encode(
+            USDC_OPTIMISM_BRIDGE,
+            leafDomain,
+            TypeCasts.addressToBytes32(users.alice),
+            QUOTED_CALLS_BRIDGE_EXACT_IN,
+            MESSAGE_FEE,
+            OPTIMISM_USDC_ADDRESS,
+            QUOTED_CALLS_CONTRACT_BALANCE
+        );
+        inputs[1] = abi.encodeCall(QuotedCalls.execute, (quotedCommands, quotedInputs));
+
+        deal(address(OP), users.alice, amountIn);
+        OP.approve(address(router), amountIn);
+
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
+
+        assertEq(OP.balanceOf(users.alice), 0);
+        assertEq(ERC20(OPTIMISM_USDC_ADDRESS).balanceOf(users.alice), usdcInitialBal);
+        assertEq(ERC20(OPTIMISM_USDC_ADDRESS).balanceOf(address(router)), 0);
+
+        vm.selectFork(leafId);
+        leafMailbox.processNextInboundMessage();
+
+        uint256 leafBalance = ERC20(BASE_USDC_ADDRESS).balanceOf(users.alice);
+        assertGt(leafBalance, 0);
+        assertGe(leafBalance, amountOutMin);
+    }
+
+    function testGas_HypERC20CollateralBridgePermit2() public {
+        _approveUsdcWithPermit2();
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypErc20CollateralBridge({
+            usePermit2: true,
+            token: OPTIMISM_USDC_ADDRESS,
+            sweepETH: true
+        });
+
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
         vm.snapshotGasLastCall('BridgeRouter_HypERC20Collateral_Permit2');
     }
 
-    function testGas_HypERC20CollateralBridgeDirectApproval() public whenBridgeTypeIsHYP_ERC20_COLLATERAL {
+    function testGas_HypERC20CollateralBridgeDirectApproval() public {
         ERC20(OPTIMISM_USDC_ADDRESS).approve(address(router), type(uint256).max);
+        (bytes memory commands, bytes[] memory inputs) = _encodeHypErc20CollateralBridge({
+            usePermit2: false,
+            token: OPTIMISM_USDC_ADDRESS,
+            sweepETH: true
+        });
 
-        router.execute{value: feeAmount}(commands, inputs);
+        router.execute{value: MESSAGE_FEE}(commands, inputs);
         vm.snapshotGasLastCall('BridgeRouter_HypERC20Collateral_DirectApproval');
     }
 
-    function _assertXVelo(uint256 _bridgeAmount) private {
-        if (vm.activeFork() == rootId) {
-            // Verify token transfer occurred
-            assertEq(
-                ERC20(VELO_ADDRESS).balanceOf(users.alice),
-                xVeloInitialBal - _bridgeAmount,
-                'VELO balance should only contain leftover on root after bridge'
-            );
-
-            vm.selectFork(leafId_2);
-            leafMailbox_2.processNextInboundMessage();
-
-            assertEq(
-                ERC20(XVELO_ADDRESS).balanceOf(users.alice) - xVeloInitialBal, // account for initial balance minted in setup
-                _bridgeAmount,
-                'XVELO balance should match the bridge amount on leaf after bridge'
-            );
+    function _encodeHypXERC20Bridge(
+        bool usePermit2,
+        uint256 pullAmount,
+        uint256 bridgeAmount,
+        uint256 bridgeValue,
+        uint32 domain,
+        bytes32 recipient,
+        address token,
+        bool sweepETH
+    ) internal pure returns (bytes memory commands, bytes[] memory inputs) {
+        uint256 innerCount = sweepETH ? 3 : 2;
+        bytes memory quotedCommands;
+        if (usePermit2) {
+            quotedCommands = sweepETH
+                ? abi.encodePacked(
+                    bytes1(uint8(QuotedCallsCommands.PERMIT2_TRANSFER_FROM)),
+                    bytes1(uint8(QuotedCallsCommands.TRANSFER_REMOTE)),
+                    bytes1(uint8(QuotedCallsCommands.SWEEP))
+                )
+                : abi.encodePacked(
+                    bytes1(uint8(QuotedCallsCommands.PERMIT2_TRANSFER_FROM)),
+                    bytes1(uint8(QuotedCallsCommands.TRANSFER_REMOTE))
+                );
         } else {
-            // Verify token transfer occurred
-            assertEq(
-                ERC20(XVELO_ADDRESS).balanceOf(users.alice),
-                xVeloInitialBal - _bridgeAmount,
-                'XVELO balance only contain leftover on leaf after bridge'
-            );
-
-            vm.selectFork(rootId);
-            rootMailbox.processNextInboundMessage();
-
-            assertEq(
-                ERC20(VELO_ADDRESS).balanceOf(users.alice) - xVeloInitialBal, // account for initial balance minted in setup
-                _bridgeAmount,
-                'VELO balance should match the bridge amount on root after bridge'
-            );
+            quotedCommands = sweepETH
+                ? abi.encodePacked(
+                    bytes1(uint8(QuotedCallsCommands.TRANSFER_FROM)),
+                    bytes1(uint8(QuotedCallsCommands.TRANSFER_REMOTE)),
+                    bytes1(uint8(QuotedCallsCommands.SWEEP))
+                )
+                : abi.encodePacked(
+                    bytes1(uint8(QuotedCallsCommands.TRANSFER_FROM)),
+                    bytes1(uint8(QuotedCallsCommands.TRANSFER_REMOTE))
+                );
         }
+
+        bytes[] memory quotedInputs = new bytes[](innerCount);
+        quotedInputs[0] = usePermit2
+            ? abi.encode(token, uint160(pullAmount))
+            : abi.encode(token, pullAmount);
+        quotedInputs[1] =
+            abi.encode(OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS, domain, recipient, bridgeAmount, bridgeValue, token, bridgeAmount);
+        if (sweepETH) quotedInputs[2] = abi.encode(Constants.ETH);
+
+        commands = abi.encodePacked(bytes1(uint8(Commands.QUOTED_CALLS)));
+        inputs = new bytes[](1);
+        inputs[0] = abi.encodeCall(QuotedCalls.execute, (quotedCommands, quotedInputs));
     }
 
-    /// GAS CHECKS ///
+    function _encodeHypErc20CollateralBridge(bool usePermit2, address token, bool sweepETH)
+        internal
+        view
+        returns (bytes memory commands, bytes[] memory inputs)
+    {
+        bytes memory quotedCommands = sweepETH
+            ? abi.encodePacked(
+                bytes1(uint8(usePermit2 ? QuotedCallsCommands.PERMIT2_TRANSFER_FROM : QuotedCallsCommands.TRANSFER_FROM)),
+                bytes1(uint8(QuotedCallsCommands.TRANSFER_REMOTE)),
+                bytes1(uint8(QuotedCallsCommands.SWEEP))
+            )
+            : abi.encodePacked(
+                bytes1(uint8(usePermit2 ? QuotedCallsCommands.PERMIT2_TRANSFER_FROM : QuotedCallsCommands.TRANSFER_FROM)),
+                bytes1(uint8(QuotedCallsCommands.TRANSFER_REMOTE))
+            );
 
-    function testGas_HypXERC20BridgePermit2() public whenBridgeTypeIsHYP_XERC20 {
+        bytes[] memory quotedInputs = new bytes[](sweepETH ? 3 : 2);
+        quotedInputs[0] = usePermit2 ? abi.encode(token, uint160(usdcBridgeAmount)) : abi.encode(token, usdcBridgeAmount);
+        quotedInputs[1] =
+            abi.encode(USDC_OPTIMISM_BRIDGE, leafDomain, TypeCasts.addressToBytes32(users.alice), usdcBridgeAmount, MESSAGE_FEE, token, usdcBridgeAmount);
+        if (sweepETH) quotedInputs[2] = abi.encode(Constants.ETH);
+
+        commands = abi.encodePacked(bytes1(uint8(Commands.QUOTED_CALLS)));
+        inputs = new bytes[](1);
+        inputs[0] = abi.encodeCall(QuotedCalls.execute, (quotedCommands, quotedInputs));
+    }
+
+    function _approveOpenUsdtWithPermit2() internal {
         ERC20(OPEN_USDT_ADDRESS).approve(address(rootPermit2), type(uint256).max);
         rootPermit2.approve(OPEN_USDT_ADDRESS, address(router), type(uint160).max, type(uint48).max);
-
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-        vm.snapshotGasLastCall('BridgeRouter_HypXERC20_Permit2');
     }
 
-    function testGas_HypXERC20BridgeDirectApproval() public whenBridgeTypeIsHYP_XERC20 {
-        ERC20(OPEN_USDT_ADDRESS).approve(address(router), type(uint256).max);
-
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-        vm.snapshotGasLastCall('BridgeRouter_HypXERC20_DirectApproval');
+    function _approveUsdcWithPermit2() internal {
+        ERC20(OPTIMISM_USDC_ADDRESS).approve(address(rootPermit2), type(uint256).max);
+        rootPermit2.approve(OPTIMISM_USDC_ADDRESS, address(router), type(uint160).max, type(uint48).max);
     }
 
-    function testGas_HypXERC20BridgeRouterBalance() public whenBridgeTypeIsHYP_XERC20 {
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.HYP_XERC20),
-            ActionConstants.MSG_SENDER,
-            OPEN_USDT_ADDRESS,
-            OPEN_USDT_OPTIMISM_BRIDGE_ADDRESS,
-            ActionConstants.CONTRACT_BALANCE,
-            feeAmount + leftoverETH,
-            0, // tokenFee
-            leafDomain,
-            false
-        );
+    function _assertOpenUsdtBridged(uint256 bridgeAmount) internal {
+        assertEq(ERC20(OPEN_USDT_ADDRESS).balanceOf(users.alice), openUsdtInitialBal - bridgeAmount);
 
-        deal(OPEN_USDT_ADDRESS, address(router), openUsdtBridgeAmount);
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-        vm.snapshotGasLastCall('BridgeRouter_HypXERC20_RouterBalance');
-    }
+        vm.selectFork(leafId);
+        leafMailbox.processNextInboundMessage();
 
-    function testGas_XVeloBridgePermit2() public whenBridgeTypeIsXVELO whenDestinationChainIsMETAL {
-        ERC20(VELO_ADDRESS).approve(address(rootPermit2), type(uint256).max);
-        rootPermit2.approve(VELO_ADDRESS, address(router), type(uint160).max, type(uint48).max);
-
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-        vm.snapshotGasLastCall('BridgeRouter_XVelo_Permit2');
-    }
-
-    function testGas_XVeloBridgeDirectApproval() public whenBridgeTypeIsXVELO whenDestinationChainIsMETAL {
-        ERC20(VELO_ADDRESS).approve(address(router), type(uint256).max);
-
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-        vm.snapshotGasLastCall('BridgeRouter_XVelo_DirectApproval');
-    }
-
-    function testGas_XVeloBridgeRouterBalance() public whenBridgeTypeIsXVELO whenDestinationChainIsMETAL {
-        inputs[0] = abi.encode(
-            uint8(BridgeTypes.XVELO),
-            ActionConstants.MSG_SENDER,
-            VELO_ADDRESS,
-            address(rootXVeloTokenBridge),
-            ActionConstants.CONTRACT_BALANCE,
-            feeAmount + leftoverETH,
-            0, // tokenFee
-            leafDomain_2,
-            false
-        );
-
-        deal(VELO_ADDRESS, address(router), xVeloBridgeAmount);
-        router.execute{value: feeAmount + leftoverETH}(commands, inputs);
-        vm.snapshotGasLastCall('BridgeRouter_XVelo_RouterBalance');
+        assertEq(ERC20(OPEN_USDT_ADDRESS).balanceOf(users.alice), bridgeAmount);
     }
 }

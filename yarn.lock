@@ -834,10 +834,8 @@
   resolved "https://registry.npmjs.org/@fastify/busboy/-/busboy-2.1.1.tgz"
   integrity sha512-vBZP4NlzfOlerQTnba4aqZoMhE/a9HY7HRqoOPaETQcSQuWEIyZMHGfVu6w9wGtGK5fED5qRs2DteVCjOH60sA==
 
-"@hyperlane-xyz/core@11.3.1":
+"@hyperlane-xyz/core@file:../monorepo/solidity":
   version "11.3.1"
-  resolved "https://registry.yarnpkg.com/@hyperlane-xyz/core/-/core-11.3.1.tgz#03371956603b6d1d6c879115cc1b184c8a7ea9de"
-  integrity sha512-PX/qoJnPXXnIkE/16o/OPXxbgyIV6RHWYlpuh4QIB6uMvJUK4lbNxSQnfo9bVlH7eKbaD3NL2ENV28053ig/SQ==
 
 "@istanbuljs/load-nyc-config@^1.0.0":
   version "1.1.0"

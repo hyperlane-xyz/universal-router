@@ -32,7 +32,7 @@
     "node": ">=14"
   },
   "dependencies": {
-    "@hyperlane-xyz/core": "11.3.1",
+    "@hyperlane-xyz/core": "file:../monorepo/solidity",
     "@openzeppelin/contracts": "5.3.0",
     "@openzeppelin/contracts-v4": "npm:@openzeppelin/contracts@4.9.6",
     "@openzeppelin/contracts-upgradeable-v4": "npm:@openzeppelin/contracts-upgradeable@4.9.6",

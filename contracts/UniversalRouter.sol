@@ -2,6 +2,9 @@
 pragma solidity ^0.8.24;
 
 // Command implementations
+import {Quote} from '@hyperlane/core/contracts/interfaces/ITokenBridge.sol';
+import {IAllowanceTransfer} from 'permit2/src/interfaces/IAllowanceTransfer.sol';
+import {QuotedCalls} from '@hyperlane/core/contracts/token/QuotedCalls.sol';
 import {Dispatcher} from './base/Dispatcher.sol';
 import {RouterDeployParameters} from './types/RouterDeployParameters.sol';
 import {PaymentsImmutables, PaymentsParameters} from './modules/PaymentsImmutables.sol';
@@ -12,6 +15,8 @@ import {Locker} from './libraries/Locker.sol';
 import {IUniversalRouter} from './interfaces/IUniversalRouter.sol';
 
 contract UniversalRouter is IUniversalRouter, Dispatcher {
+    address internal immutable _quotedCallsModule;
+
     constructor(RouterDeployParameters memory params)
         RouterImmutables(RouterParameters(
                 params.v2Factory,
@@ -29,7 +34,9 @@ contract UniversalRouter is IUniversalRouter, Dispatcher {
             ))
         V4SwapRouter(params.v4PoolManager)
         PaymentsImmutables(PaymentsParameters(params.permit2, params.weth9))
-    {}
+    {
+        _quotedCallsModule = address(new QuotedCalls(IAllowanceTransfer(params.permit2)));
+    }
 
     modifier checkDeadline(uint256 deadline) {
         if (block.timestamp > deadline) revert TransactionDeadlinePassed();
@@ -73,7 +80,44 @@ contract UniversalRouter is IUniversalRouter, Dispatcher {
         }
     }
 
+    /// @inheritdoc IUniversalRouter
+    function quoteExecute(bytes calldata commands, bytes[] calldata inputs)
+        external
+        override
+        returns (Quote[][] memory results)
+    {
+        bool success;
+        bytes memory output;
+        address module = _quotedCallsModule;
+        bytes4 selector = QuotedCalls.quoteExecute.selector;
+        assembly ("memory-safe") {
+            let argsSize := sub(calldatasize(), 0x04)
+            let payloadSize := add(0x04, argsSize)
+            let payload := mload(0x40)
+            mstore(payload, payloadSize)
+            mstore(add(payload, 0x20), shl(224, selector))
+            calldatacopy(add(payload, 0x24), 0x04, argsSize)
+
+            success := delegatecall(gas(), module, add(payload, 0x20), payloadSize, 0, 0)
+
+            let returnSize := returndatasize()
+            output := mload(0x40)
+            mstore(output, returnSize)
+            returndatacopy(add(output, 0x20), 0, returnSize)
+            mstore(0x40, and(add(add(output, 0x20), add(returnSize, 0x1f)), not(0x1f)))
+        }
+        if (!success) assembly ("memory-safe") {
+            revert(add(output, 0x20), mload(output))
+        }
+        results = abi.decode(output, (Quote[][]));
+    }
+
     function successRequired(bytes1 command) internal pure returns (bool) {
         return command & Commands.FLAG_ALLOW_REVERT == 0;
+    }
+
+    /// @inheritdoc Dispatcher
+    function quotedCallsModule() internal view override returns (address) {
+        return _quotedCallsModule;
     }
 }

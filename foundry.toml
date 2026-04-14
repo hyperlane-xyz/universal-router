@@ -8,6 +8,7 @@ no-match-test = "testGas"
 no-match-path = "test/fork/*"
 evm_version = "cancun"
 remappings = [
+  "node_modules/@hyperlane-xyz/:permit2/=lib/permit2/src/",
   "node_modules/@hyperlane-xyz/:@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable-v4/",
   "node_modules/@hyperlane-xyz/:@openzeppelin/contracts/=node_modules/@openzeppelin/contracts-v4/",
   "@openzeppelin/contracts/=lib/uniswap-v4-periphery/lib/uniswap-v4-core/lib/openzeppelin-contracts/contracts/",
