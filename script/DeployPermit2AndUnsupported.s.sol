@@ -18,7 +18,7 @@ contract DeployPermit2AndUnsupported is Script, Constants {
     address public unsupported;
     address public permit2;
 
-    address public deployer = 0x9Bd11B31c67609Ba3772077A86cc5224e7CAE21A;
+    address public deployer = 0x4994DacdB9C57A811aFfbF878D92E00EF2E5C4C2;
 
     ICreateX public cx = ICreateX(0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed);
 
@@ -64,19 +64,25 @@ contract DeployPermit2AndUnsupported is Script, Constants {
     }
 
     function deployPermit2() internal virtual {
-        permit2 = cx.deployCreate3({
-            salt: PERMIT2_ENTROPY.calculateSalt({_deployer: deployer}),
-            initCode: abi.encodePacked(type(Permit2).creationCode)
-        });
+        permit2 = PERMIT2_ENTROPY.computeCreate3Address({_deployer: deployer});
+        if (permit2.code.length == 0) {
+            permit2 = cx.deployCreate3({
+                salt: PERMIT2_ENTROPY.calculateSalt({_deployer: deployer}),
+                initCode: abi.encodePacked(type(Permit2).creationCode)
+            });
+        }
 
         checkAddress({_entropy: PERMIT2_ENTROPY, _output: permit2});
     }
 
     function deployUnsupported() internal virtual {
-        unsupported = cx.deployCreate3({
-            salt: UNSUPPORTED_PROTOCOL_ENTROPY.calculateSalt({_deployer: deployer}),
-            initCode: abi.encodePacked(type(UnsupportedProtocol).creationCode)
-        });
+        unsupported = UNSUPPORTED_PROTOCOL_ENTROPY.computeCreate3Address({_deployer: deployer});
+        if (unsupported.code.length == 0) {
+            unsupported = cx.deployCreate3({
+                salt: UNSUPPORTED_PROTOCOL_ENTROPY.calculateSalt({_deployer: deployer}),
+                initCode: abi.encodePacked(type(UnsupportedProtocol).creationCode)
+            });
+        }
 
         checkAddress({_entropy: UNSUPPORTED_PROTOCOL_ENTROPY, _output: unsupported});
     }

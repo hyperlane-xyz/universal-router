@@ -28,16 +28,20 @@ abstract contract DeployUniversalRouter is Script, Constants {
         address veloCLFactory;
         bytes32 veloV2InitCodeHash;
         bytes32 veloCLInitCodeHash;
+        address veloCLFactory2;
+        bytes32 veloCLInitCodeHash2;
+        address veloCLFactory3;
+        bytes32 veloCLInitCodeHash3;
     }
 
     DeploymentParameters internal params;
     RouterDeployParameters internal routerParams;
     UniversalRouter public router;
 
-    address public permit2 = 0x5588D72a123472067a644756a3Eef50034B9f16b;
-    address public unsupported = 0x2836F1486dCFE293ffd0c441f2DE06d751D0d4BE;
+    address public permit2 = 0x494bbD8A3302AcA833D307D11838f18DbAdA9C25;
+    address public unsupported = 0x61fF070AD105D5aa6d8F9eA21212CB574EeFCAd5;
 
-    address public deployer = 0x9Bd11B31c67609Ba3772077A86cc5224e7CAE21A;
+    address public deployer = 0x4994DacdB9C57A811aFfbF878D92E00EF2E5C4C2;
 
     address constant UNSUPPORTED_PROTOCOL = address(0);
     bytes32 constant BYTES32_ZERO = bytes32(0);
@@ -64,7 +68,11 @@ abstract contract DeployUniversalRouter is Script, Constants {
             veloV2Factory: mapUnsupported(params.veloV2Factory),
             veloCLFactory: mapUnsupported(params.veloCLFactory),
             veloV2InitCodeHash: params.veloV2InitCodeHash,
-            veloCLInitCodeHash: params.veloCLInitCodeHash
+            veloCLInitCodeHash: params.veloCLInitCodeHash,
+            veloCLFactory2: mapUnsupported(params.veloCLFactory2),
+            veloCLInitCodeHash2: params.veloCLInitCodeHash2,
+            veloCLFactory3: mapUnsupported(params.veloCLFactory3),
+            veloCLInitCodeHash3: params.veloCLInitCodeHash3
         });
 
         deploy();

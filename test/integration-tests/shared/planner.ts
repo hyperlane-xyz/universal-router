@@ -24,7 +24,7 @@ export enum CommandType {
 
   V4_SWAP = 0x10,
   V4_INITIALIZE_POOL = 0x11,
-  BRIDGE_TOKEN = 0x12,
+  QUOTED_CALLS = 0x14,
 
   EXECUTE_SUB_PLAN = 0x21,
 }
@@ -41,7 +41,6 @@ const PERMIT_STRUCT =
   '((address token,uint160 amount,uint48 expiration,uint48 nonce) details, address spender, uint256 sigDeadline)'
 
 const POOL_KEY_STRUCT = '(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)'
-
 const PERMIT_BATCH_STRUCT =
   '((address token,uint160 amount,uint48 expiration,uint48 nonce)[] details, address spender, uint256 sigDeadline)'
 
@@ -75,6 +74,7 @@ const ABI_DEFINITION: { [key in CommandType]: string[] } = {
   // V4 Actions
   [CommandType.V4_SWAP]: ['bytes', 'bytes[]'],
   [CommandType.V4_INITIALIZE_POOL]: [POOL_KEY_STRUCT, 'uint160'],
+  [CommandType.QUOTED_CALLS]: ['bytes'],
 }
 
 export class RoutePlanner {

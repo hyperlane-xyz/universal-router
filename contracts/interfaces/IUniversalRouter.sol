@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.24;
 
+import {Quote} from '@hyperlane/core/contracts/interfaces/ITokenBridge.sol';
+
 interface IUniversalRouter {
     /// @notice Thrown when a required command has failed
     error ExecutionFailed(uint256 commandIndex, bytes message);
@@ -22,4 +24,10 @@ interface IUniversalRouter {
     /// @param inputs An array of byte strings containing abi encoded inputs for each command
     /// @param deadline The deadline by which the transaction must be executed
     function execute(bytes calldata commands, bytes[] calldata inputs, uint256 deadline) external payable;
+
+    /// @notice Quotes router commands without executing token movements.
+    /// @dev Equivalent to Hyperlane `QuotedCalls.quoteExecute`.
+    function quoteExecute(bytes calldata commands, bytes[] calldata inputs)
+        external
+        returns (Quote[][] memory results);
 }

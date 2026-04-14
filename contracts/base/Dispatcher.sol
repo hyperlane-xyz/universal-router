@@ -9,40 +9,35 @@ import {ActionConstants} from '@uniswap/v4-periphery/src/libraries/ActionConstan
 import {CalldataDecoder} from '@uniswap/v4-periphery/src/libraries/CalldataDecoder.sol';
 import {PoolKey} from '@uniswap/v4-core/src/types/PoolKey.sol';
 import {IPoolManager} from '@uniswap/v4-core/src/interfaces/IPoolManager.sol';
+import {BaseActionsRouter} from '@uniswap/v4-periphery/src/base/BaseActionsRouter.sol';
 
-import {IInterchainAccountRouter} from '../interfaces/external/IInterchainAccountRouter.sol';
 import {V2SwapRouter} from '../modules/uniswap/v2/V2SwapRouter.sol';
 import {V3SwapRouter} from '../modules/uniswap/v3/V3SwapRouter.sol';
 import {V4SwapRouter} from '../modules/uniswap/v4/V4SwapRouter.sol';
 import {BytesLib} from '../modules/uniswap/v3/BytesLib.sol';
 import {Payments} from '../modules/Payments.sol';
-import {BridgeRouter} from '../modules/bridge/BridgeRouter.sol';
 import {Commands} from '../libraries/Commands.sol';
 import {Constants} from '../libraries/Constants.sol';
 import {Lock} from './Lock.sol';
 
 /// @title Decodes and Executes Commands
 /// @notice Called by the UniversalRouter contract to efficiently decode and execute a singular command
-abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRouter, BridgeRouter, Lock {
+abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRouter, Lock {
     using BytesLib for bytes;
     using CalldataDecoder for bytes;
 
     error InvalidCommandType(uint256 commandType);
     error BalanceTooLow();
+    error QuotedCallsNestedNotSupported();
 
     event UniversalRouterSwap(address indexed sender, address indexed recipient);
-    event UniversalRouterBridge(
-        address indexed sender, address indexed recipient, address indexed token, uint256 amount, uint32 domain
-    );
-
-    event CrossChainSwap(
-        address indexed caller, address indexed localRouter, uint32 indexed destinationDomain, bytes32 commitment
-    );
 
     /// @notice Executes encoded commands along with provided inputs.
     /// @param commands A set of concatenated commands, each 1 byte in length
     /// @param inputs An array of byte strings containing abi encoded inputs for each command
     function execute(bytes calldata commands, bytes[] calldata inputs) external payable virtual;
+
+    function quotedCallsModule() internal view virtual returns (address);
 
     /// @notice Public view function to be used instead of msg.sender, as the contract performs self-reentrancy and at
     /// times msg.sender == address(this). Instead msgSender() returns the initiator of the lock
@@ -141,14 +136,15 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                             permitBatch := add(inputs.offset, calldataload(inputs.offset))
                         }
                         bytes calldata data = inputs.toBytes(1);
-                        (success, output) = address(PERMIT2).call(
-                            abi.encodeWithSignature(
-                                'permit(address,((address,uint160,uint48,uint48)[],address,uint256),bytes)',
-                                msgSender(),
-                                permitBatch,
-                                data
-                            )
-                        );
+                        (success, output) = address(PERMIT2)
+                            .call(
+                                abi.encodeWithSignature(
+                                    'permit(address,((address,uint160,uint48,uint48)[],address,uint256),bytes)',
+                                    msgSender(),
+                                    permitBatch,
+                                    data
+                                )
+                            );
                     } else if (command == Commands.SWEEP) {
                         // equivalent:  abi.decode(inputs, (address, address, uint256))
                         address token;
@@ -260,14 +256,15 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                             permitSingle := inputs.offset
                         }
                         bytes calldata data = inputs.toBytes(6); // PermitSingle takes first 6 slots (0..5)
-                        (success, output) = address(PERMIT2).call(
-                            abi.encodeWithSignature(
-                                'permit(address,((address,uint160,uint48,uint48),address,uint256),bytes)',
-                                msgSender(),
-                                permitSingle,
-                                data
-                            )
-                        );
+                        (success, output) = address(PERMIT2)
+                            .call(
+                                abi.encodeWithSignature(
+                                    'permit(address,((address,uint160,uint48,uint48),address,uint256),bytes)',
+                                    msgSender(),
+                                    permitSingle,
+                                    data
+                                )
+                            );
                     } else if (command == Commands.WRAP_ETH) {
                         // equivalent: abi.decode(inputs, (address, uint256))
                         address recipient;
@@ -326,94 +323,11 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                     }
                     (success, output) =
                         address(poolManager).call(abi.encodeCall(IPoolManager.initialize, (poolKey, sqrtPriceX96)));
-                } else if (command == Commands.BRIDGE_TOKEN) {
-                    // equivalent: abi.decode(inputs, (uint8, address, address, address, uint256, uint256, uint256, uint32, bool))
-                    uint8 bridgeType;
-                    address recipient;
-                    address token;
-                    address bridge;
-                    uint256 amount;
-                    uint256 msgFee;
-                    uint256 maxTokenFee;
-                    uint32 domain;
-                    bool payerIsUser;
-                    assembly {
-                        bridgeType := calldataload(inputs.offset)
-                        recipient := calldataload(add(inputs.offset, 0x20))
-                        token := calldataload(add(inputs.offset, 0x40))
-                        bridge := calldataload(add(inputs.offset, 0x60))
-                        amount := calldataload(add(inputs.offset, 0x80))
-                        msgFee := calldataload(add(inputs.offset, 0xA0))
-                        maxTokenFee := calldataload(add(inputs.offset, 0xC0))
-                        domain := calldataload(add(inputs.offset, 0xE0))
-                        payerIsUser := calldataload(add(inputs.offset, 0x100))
-                    }
-                    address sender = msgSender();
-                    address payer = payerIsUser ? sender : address(this);
-                    recipient = recipient == ActionConstants.MSG_SENDER ? sender : recipient;
-                    if (amount == ActionConstants.CONTRACT_BALANCE) amount = ERC20(token).balanceOf(address(this));
-                    bridgeToken({
-                        bridgeType: bridgeType,
-                        sender: sender,
-                        recipient: recipient,
-                        token: token,
-                        bridge: bridge,
-                        amount: amount,
-                        msgFee: msgFee,
-                        maxTokenFee: maxTokenFee,
-                        domain: domain,
-                        payer: payer
-                    });
-                    emit UniversalRouterBridge({
-                        sender: sender,
-                        recipient: recipient,
-                        token: token,
-                        amount: amount,
-                        domain: domain
-                    });
-                } else if (command == Commands.EXECUTE_CROSS_CHAIN) {
-                    // equivalent: abi.decode(inputs, (uint32, address, bytes32, bytes32, bytes32, uint256, address, uint256, address, bytes))
-                    uint32 domain;
-                    address icaRouter;
-                    bytes32 remoteRouter;
-                    bytes32 ism;
-                    bytes32 commitment;
-                    uint256 msgFee;
-                    address token;
-                    uint256 tokenFee;
-                    address hook;
-                    assembly {
-                        domain := calldataload(inputs.offset)
-                        icaRouter := calldataload(add(inputs.offset, 0x20))
-                        remoteRouter := calldataload(add(inputs.offset, 0x40))
-                        ism := calldataload(add(inputs.offset, 0x60))
-                        commitment := calldataload(add(inputs.offset, 0x80))
-                        msgFee := calldataload(add(inputs.offset, 0xA0))
-                        token := calldataload(add(inputs.offset, 0xC0))
-                        tokenFee := calldataload(add(inputs.offset, 0xE0))
-                        hook := calldataload(add(inputs.offset, 0x100))
-                        // 0x120 offset contains the hook metadata, decoded below
-                    }
-                    bytes calldata hookMetadata = inputs.toBytes(9);
-
-                    if (token != address(0)) ERC20(token).approve(icaRouter, tokenFee);
-                    IInterchainAccountRouter(icaRouter).callRemoteCommitReveal{value: msgFee}({
-                        _destination: domain,
-                        _router: remoteRouter,
-                        _ism: ism,
-                        _hookMetadata: hookMetadata,
-                        _hook: IPostDispatchHook(hook),
-                        _salt: TypeCasts.addressToBytes32(msgSender()),
-                        _commitment: commitment
-                    });
-                    emit CrossChainSwap({
-                        caller: msgSender(),
-                        localRouter: icaRouter,
-                        destinationDomain: domain,
-                        commitment: commitment
-                    });
+                } else if (command == Commands.QUOTED_CALLS) {
+                    if (msg.sender == address(this)) revert QuotedCallsNestedNotSupported();
+                    (success, output) = _delegateQuotedCalls(inputs);
                 } else {
-                    // placeholder area for commands 0x14-0x20
+                    // placeholder area for commands 0x15-0x20
                     revert InvalidCommandType(command);
                 }
             }
@@ -439,6 +353,25 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
             return address(this);
         } else {
             return recipient;
+        }
+    }
+
+    function _delegateQuotedCalls(bytes calldata inputs) internal returns (bool success, bytes memory output) {
+        address module = quotedCallsModule();
+
+        assembly ("memory-safe") {
+            let payloadSize := inputs.length
+            let payload := mload(0x40)
+            mstore(payload, payloadSize)
+            calldatacopy(add(payload, 0x20), inputs.offset, inputs.length)
+
+            success := delegatecall(gas(), module, add(payload, 0x20), payloadSize, 0, 0)
+
+            let returnSize := returndatasize()
+            output := mload(0x40)
+            mstore(output, returnSize)
+            returndatacopy(add(output, 0x20), 0, returnSize)
+            mstore(0x40, and(add(add(output, 0x20), add(returnSize, 0x1f)), not(0x1f)))
         }
     }
 }
