@@ -1656,9 +1656,57 @@ contract BridgeTokenTest is BaseOverrideBridge {
         assertEq(address(router).balance, 0, 'router drained');
     }
 
+    /// @notice Combined native hook + linear warp fees with plain CONTRACT_BALANCE.
+    /// Router resolves input from balance, quote deducts both fees, client passes
+    /// no pre-computation. For rate=1% and hookFee, totalIn = 1.01 ETH + hookFee →
+    /// bridgeAmount = 1 ETH.
+    function test_HypNative_WithCombinedFees() external whenBasicValidationsPass whenBridgeTypeIsHYP_NATIVE {
+        uint256 hookFee = _setHypNativeHookFee(0.0005 ether);
+        uint256 expectedBridge = 1 ether;
+        uint256 totalIn = 1.01 ether + hookFee; // linear 1% + hook
+
+        vm.stopPrank();
+        LinearFee linearFee = new LinearFee(address(0), 0.02 ether, 1 ether, users.owner);
+        vm.prank(users.owner);
+        hypNative.setFeeRecipient(address(linearFee));
+        vm.startPrank(users.alice);
+
+        inputs[0] = abi.encode(
+            uint8(BridgeTypes.HYP_ERC20_COLLATERAL),
+            ActionConstants.MSG_SENDER,
+            Constants.ETH,
+            address(hypNative),
+            ActionConstants.CONTRACT_BALANCE,
+            0,
+            totalIn - expectedBridge,
+            leafDomain,
+            false
+        );
+
+        uint256 collateralBefore = address(hypNative).balance;
+
+        router.execute{value: totalIn}(commands, inputs);
+
+        assertEq(
+            address(hypNative).balance - collateralBefore,
+            expectedBridge,
+            'collateral credited bridgeAmount (hook + linear absorbed)'
+        );
+        assertEq(address(linearFee).balance, totalIn - expectedBridge - hookFee, 'linear fee = totalIn - bridge - hook');
+        assertEq(address(router).balance, 0, 'router drained');
+    }
+
     function testGas_HypNativeBridge() public whenBridgeTypeIsHYP_NATIVE {
         router.execute{value: nativeBridgeAmount}(commands, inputs);
         vm.snapshotGasLastCall('BridgeRouter_HypNative');
+    }
+
+    /// @notice Gas snapshot for the "router already holds native" path (e.g. after a
+    /// preceding swap+unwrap). Mirrors testGas_HypXERC20BridgeRouterBalance.
+    function testGas_HypNativeBridgeRouterBalance() public whenBridgeTypeIsHYP_NATIVE {
+        vm.deal(address(router), nativeBridgeAmount);
+        router.execute(commands, inputs);
+        vm.snapshotGasLastCall('BridgeRouter_HypNative_RouterBalance');
     }
 
     function _assertXVelo(uint256 _bridgeAmount) private {
