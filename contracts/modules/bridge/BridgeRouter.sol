@@ -69,10 +69,15 @@ abstract contract BridgeRouter is Permit2Payments {
             uint256 tokenFee = amount - bridgeAmount;
             if (tokenFee > maxTokenFee) revert TokenFeeExceedsMax(tokenFee, maxTokenFee);
 
-            prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
-
-            executeHypBridge({bridge: bridge, recipient: recipient, amount: bridgeAmount, msgFee: msgFee, domain: domain});
-            ERC20(token).safeApprove({to: bridge, amount: 0});
+            // Native (HypNative) path: token == address(0). Forward the full native `amount`
+            // to transferRemote — it covers bridgeAmount + all fees. No ERC20 pull/approve.
+            if (token == address(0)) {
+                executeHypBridge({bridge: bridge, recipient: recipient, amount: bridgeAmount, msgFee: amount, domain: domain});
+            } else {
+                prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
+                executeHypBridge({bridge: bridge, recipient: recipient, amount: bridgeAmount, msgFee: msgFee, domain: domain});
+                ERC20(token).safeApprove({to: bridge, amount: 0});
+            }
         } else {
             revert InvalidBridgeType({bridgeType: bridgeType});
         }
