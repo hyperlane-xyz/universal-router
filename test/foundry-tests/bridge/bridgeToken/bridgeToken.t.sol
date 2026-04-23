@@ -35,9 +35,10 @@ contract BridgeTokenTest is BaseOverrideBridge {
 
     // HypNative (routed via HYP_ERC20_COLLATERAL sentinel with token=address(0))
     HypNative public hypNative;
+    HypNative public leafHypNative;
     uint256 public nativeBridgeAmount = 0.1 ether;
     uint256 public nativeInitialBal = 10 ether;
-    bytes32 public hypNativeRemoteRouter = bytes32(uint256(uint160(0xDEAD)));
+    uint256 public leafHypNativeLiquidity = 10 ether;
 
     function setUp() public override {
         super.setUp();
@@ -60,12 +61,27 @@ contract BridgeTokenTest is BaseOverrideBridge {
         deal(BASE_USDC_ADDRESS, USDC_BASE_BRIDGE, usdcInitialBal);
         vm.selectFork(rootId);
 
-        // Deploy a HypNative locally — no pre-deployed native warp route on this fork.
+        // Deploy HypNative on both forks — no pre-deployed native warp route exists.
+        vm.selectFork(leafId);
+        vm.startPrank(users.owner);
+        leafHypNative = new HypNative(1, 1, address(leafMailbox));
+        leafHypNative.initialize(address(0), address(0), users.owner);
+        vm.stopPrank();
+        vm.deal(address(leafHypNative), leafHypNativeLiquidity); // fund for outbound payouts
+
+        vm.selectFork(rootId);
         vm.startPrank(users.owner);
         hypNative = new HypNative(1, 1, address(rootMailbox));
         hypNative.initialize(address(0), address(0), users.owner);
-        hypNative.enrollRemoteRouter(leafDomain, hypNativeRemoteRouter);
+        hypNative.enrollRemoteRouter(leafDomain, TypeCasts.addressToBytes32(address(leafHypNative)));
         vm.stopPrank();
+
+        // Enroll root as remote on leaf
+        vm.selectFork(leafId);
+        vm.prank(users.owner);
+        leafHypNative.enrollRemoteRouter(rootDomain, TypeCasts.addressToBytes32(address(hypNative)));
+
+        vm.selectFork(rootId);
 
         inputs = new bytes[](1);
 
@@ -1516,6 +1532,15 @@ contract BridgeTokenTest is BaseOverrideBridge {
         hookFee = 2 * fee;
     }
 
+    /// @dev Verify the bridged native arrives on the destination by processing the
+    /// inbound mailbox message and asserting alice's leaf balance delta.
+    function _assertHypNativeDelivery(uint256 bridgeAmount) private {
+        vm.selectFork(leafId);
+        uint256 before_ = users.alice.balance;
+        leafMailbox.processNextInboundMessage();
+        assertEq(users.alice.balance - before_, bridgeAmount, 'alice received bridgeAmount on leaf');
+    }
+
     /// @notice Baseline: alice sends native as msg.value, router consumes full balance
     /// via CONTRACT_BALANCE. Recipient (= collateral on origin) credited 1:1.
     function test_HypNative_WhenNoFees() external whenBasicValidationsPass whenBridgeTypeIsHYP_NATIVE {
@@ -1535,6 +1560,8 @@ contract BridgeTokenTest is BaseOverrideBridge {
             'collateral credited full bridgeAmount (no fees)'
         );
         assertEq(address(router).balance, 0, 'router drained');
+
+        _assertHypNativeDelivery(nativeBridgeAmount);
     }
 
     /// @notice Hook fee: same client logic (CONTRACT_BALANCE + maxTokenFee cap). The
@@ -1556,6 +1583,8 @@ contract BridgeTokenTest is BaseOverrideBridge {
             'collateral credited bridgeAmount (hook fee absorbed)'
         );
         assertEq(address(router).balance, 0, 'router drained');
+
+        _assertHypNativeDelivery(nativeBridgeAmount);
     }
 
     /// @notice Linear warp fee: same client logic. For rate=1%, totalIn=1.01 ETH
@@ -1593,6 +1622,8 @@ contract BridgeTokenTest is BaseOverrideBridge {
         );
         assertEq(address(linearFee).balance, totalIn - expectedBridge, 'linear fee recipient got overage');
         assertEq(address(router).balance, 0, 'router drained');
+
+        _assertHypNativeDelivery(expectedBridge);
     }
 
     function test_HypNative_WhenTokenFeeExceedsMax() external whenBasicValidationsPass whenBridgeTypeIsHYP_NATIVE {
@@ -1654,6 +1685,8 @@ contract BridgeTokenTest is BaseOverrideBridge {
             'collateral credited full WETH-derived native'
         );
         assertEq(address(router).balance, 0, 'router drained');
+
+        _assertHypNativeDelivery(wethIn);
     }
 
     /// @notice Combined native hook + linear warp fees with plain CONTRACT_BALANCE.
@@ -1694,6 +1727,8 @@ contract BridgeTokenTest is BaseOverrideBridge {
         );
         assertEq(address(linearFee).balance, totalIn - expectedBridge - hookFee, 'linear fee = totalIn - bridge - hook');
         assertEq(address(router).balance, 0, 'router drained');
+
+        _assertHypNativeDelivery(expectedBridge);
     }
 
     function testGas_HypNativeBridge() public whenBridgeTypeIsHYP_NATIVE {
