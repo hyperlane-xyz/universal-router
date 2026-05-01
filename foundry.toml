@@ -5,7 +5,7 @@ libs = ['lib']
 via_ir = true
 solc_version = '0.8.29'
 no-match-test = "testGas"
-no-match-path = "test/fork/*"
+no-match-path = "{test/fork/*,test/tron/*}"
 evm_version = "cancun"
 remappings = [
   "node_modules/@hyperlane-xyz/:@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable-v4/",
@@ -29,6 +29,59 @@ compilation_restrictions = [
 ]
 
 [profile.default.optimizer_details]
+constantOptimizer = true
+yul = true
+
+# Tron uses 0x41 prefix for CREATE2 instead of 0xff. The remapping below
+# substitutes the 0x41-prefix variant of OZ's Create2 library shipped by
+# `@hyperlane-xyz/core` at build time — V3SwapRouter.computePoolAddress goes
+# through Create2.computeAddress, so this is the only source-level change
+# needed for SunSwap V3 compatibility. Mirrors the pattern in
+# `monorepo/solidity/foundry.toml`'s [profile.tron].
+[profile.tron]
+src = 'contracts'
+out = 'out-tron'
+cache_path = 'forge-cache-tron'
+libs = ['lib']
+via_ir = true
+solc_version = '0.8.29'
+evm_version = "cancun"
+optimizer_runs = 10000
+auto_detect_remappings = false
+# Tron-only tests (run only under this profile, excluded from default).
+# test/tron/fork/* is a stub for live-RPC fork tests — not runnable until a
+# Tron RPC with historical-state support is configured (TronGrid only allows
+# block tag "latest"; Ankr's tron_jsonrpc requires an API key).
+no-match-path = "{test/fork/*,test/tron/fork/*}"
+remappings = [
+  # Tron 0x41 prefix — contextual remap so the Create2 imports from V3SwapRouter and any
+  # tron-specific tests resolve to the hyperlane-xyz/core override, while the broader
+  # `@openzeppelin/contracts/=lib/...` below still serves transitive OZ imports from the
+  # v4-periphery submodule. Add new contextual prefixes here as needed.
+  "contracts/modules/uniswap/v3/V3SwapRouter.sol:@openzeppelin/contracts/utils/Create2.sol=node_modules/@hyperlane-xyz/core/overrides/tron/Create2.sol",
+  "test/tron/:@openzeppelin/contracts/utils/Create2.sol=node_modules/@hyperlane-xyz/core/overrides/tron/Create2.sol",
+  "@openzeppelin/contracts/=lib/uniswap-v4-periphery/lib/uniswap-v4-core/lib/openzeppelin-contracts/contracts/",
+  "@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/",
+  "node_modules/@hyperlane-xyz/:@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable-v4/",
+  "node_modules/@hyperlane-xyz/:@openzeppelin/contracts/=node_modules/@openzeppelin/contracts-v4/",
+  "@hyperlane/=node_modules/@hyperlane-xyz/",
+  "@uniswap/v3-core/=node_modules/@uniswap/v3-core/",
+  "@uniswap/v2-core/=node_modules/@uniswap/v2-core/",
+  "@uniswap/v3-periphery/=lib/v3-periphery/",
+  "@uniswap/v4-periphery/=lib/uniswap-v4-periphery/",
+  "@uniswap/v4-core/=lib/uniswap-v4-periphery/lib/uniswap-v4-core/",
+  "@sunswap/v3-core/=lib/sunswap-v3-contracts/contracts/v3-core/",
+  "@sunswap/v3-periphery/=lib/sunswap-v3-contracts/contracts/v3-periphery/",
+  "solmate/=lib/solmate/",
+  "permit2/=lib/permit2/",
+  "forge-std/=lib/forge-std/src/",
+]
+fs_permissions = [
+  { access = "read", path = "./script/deployParameters/" },
+  { access = "read-write", path = "./deployment-addresses/" },
+]
+
+[profile.tron.optimizer_details]
 constantOptimizer = true
 yul = true
 

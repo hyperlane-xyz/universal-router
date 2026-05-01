@@ -5,6 +5,7 @@ import {IUniswapV3SwapCallback} from '@uniswap/v3-core/contracts/interfaces/call
 import {ActionConstants} from '@uniswap/v4-periphery/src/libraries/ActionConstants.sol';
 import {CalldataDecoder} from '@uniswap/v4-periphery/src/libraries/CalldataDecoder.sol';
 import {SafeCast} from '@uniswap/v3-core/contracts/libraries/SafeCast.sol';
+import {Create2} from '@openzeppelin/contracts/utils/Create2.sol';
 import {ERC20} from 'solmate/src/tokens/ERC20.sol';
 
 import {ICLPool} from '../../../interfaces/external/ICLPool.sol';
@@ -198,16 +199,12 @@ abstract contract V3SwapRouter is RouterImmutables, Permit2Payments, IUniswapV3S
             poolParam &= Constants.CL_POOL_PARAM_MASK;
         }
 
-        pool = address(
-            uint160(
-                uint256(
-                    keccak256(
-                        abi.encodePacked(
-                            hex'ff', factory, keccak256(abi.encode(tokenA, tokenB, poolParam)), initCodeHash
-                        )
-                    )
-                )
-            )
-        );
+        // Uses OZ Create2 so a Tron build profile can swap in a 0x41-prefix
+        // variant via remapping. EVM builds use the standard 0xff prefix.
+        pool = Create2.computeAddress({
+            salt: keccak256(abi.encode(tokenA, tokenB, poolParam)),
+            bytecodeHash: initCodeHash,
+            deployer: factory
+        });
     }
 }
