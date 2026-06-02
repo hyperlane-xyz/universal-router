@@ -36,6 +36,15 @@ abstract contract V3SwapRouter is RouterImmutables, Permit2Payments, IUniswapV3S
     uint160 internal constant MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342;
 
     function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
+        _v3SwapCallback(amount0Delta, amount1Delta, data);
+    }
+
+    /// @dev PancakeSwap V3 pools call this selector instead of uniswapV3SwapCallback — logic is identical.
+    function pancakeV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
+        _v3SwapCallback(amount0Delta, amount1Delta, data);
+    }
+
+    function _v3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) private {
         if (amount0Delta <= 0 && amount1Delta <= 0) revert V3InvalidSwap(); // swaps entirely within 0-liquidity regions are not supported
         (, address payer, bool isUni) = abi.decode(data, (bytes, address, bool));
         bytes calldata path = data.toBytes(0);

@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 import 'forge-std/console.sol';
 import 'forge-std/Script.sol';
-import {Permit2} from 'permit2/src/Permit2.sol';
 import {RouterDeployParameters} from 'contracts/types/RouterDeployParameters.sol';
 import {UnsupportedProtocol} from 'contracts/deploy/UnsupportedProtocol.sol';
 import {UniversalRouter} from 'contracts/UniversalRouter.sol';
@@ -38,10 +37,13 @@ abstract contract DeployUniversalRouter is Script, Constants {
     RouterDeployParameters internal routerParams;
     UniversalRouter public router;
 
-    address public permit2 = 0x494bbD8A3302AcA833D307D11838f18DbAdA9C25;
-    address public unsupported = 0x61fF070AD105D5aa6d8F9eA21212CB574EeFCAd5;
+    // Canonical Uniswap Permit2 — deployed on all target chains, no custom deploy needed.
+    address public permit2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+    // Computed from deployer + UNSUPPORTED_PROTOCOL_ENTROPY at run time — do not hardcode.
+    address public unsupported;
 
-    address public deployer = 0xd750E4A971CC4D695C1215438D6d7aEC2269a7EF;
+    // TODO: replace with Hyperlane deployer once available
+    address public deployer = 0x1cFd6A81e98de59e3eeB3AE35c3cb13FCb586E1E;
 
     address constant UNSUPPORTED_PROTOCOL = address(0);
     bytes32 constant BYTES32_ZERO = bytes32(0);
@@ -55,7 +57,18 @@ abstract contract DeployUniversalRouter is Script, Constants {
     function setUp() public virtual;
 
     function run() external {
+        unsupported = UNSUPPORTED_PROTOCOL_ENTROPY.computeCreate3Address({_deployer: deployer});
         vm.startBroadcast(deployer);
+
+        if (unsupported.code.length == 0) {
+            unsupported = cx.deployCreate3({
+                salt: UNSUPPORTED_PROTOCOL_ENTROPY.calculateSalt({_deployer: deployer}),
+                initCode: abi.encodePacked(type(UnsupportedProtocol).creationCode)
+            });
+            console.log('UnsupportedProtocol deployed:', unsupported);
+        } else {
+            console.log('UnsupportedProtocol already deployed:', unsupported);
+        }
 
         routerParams = RouterDeployParameters({
             permit2: permit2,
