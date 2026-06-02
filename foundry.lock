@@ -1,0 +1,17 @@
+{
+  "lib/forge-std": {
+    "rev": "3b20d60d14b343ee4f908cb8079495c07f5e8981"
+  },
+  "lib/permit2": {
+    "rev": "3ab831bf6b05ce7f89b585e128e468a390ebd0e2"
+  },
+  "lib/solmate": {
+    "rev": "e0e9ff05d8aa5c7c48465511f85a6efdf5d5c30d"
+  },
+  "lib/uniswap-v4-periphery": {
+    "rev": "8d1135f669ef3be22ebedf9042eef778b0348779"
+  },
+  "lib/v3-periphery": {
+    "rev": "b325bb0905d922ae61fcc7df85ee802e8df5e96c"
+  }
+}

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.15;
 
-import {InterchainAccountRouter} from '@hyperlane-updated/contracts/middleware/InterchainAccountRouter.sol';
+import {InterchainAccountRouter} from '@hyperlane/core/contracts/middleware/InterchainAccountRouter.sol';
 import {StandardHookMetadata} from '@hyperlane/core/contracts/hooks/libs/StandardHookMetadata.sol';
 import {IPostDispatchHook} from '@hyperlane/core/contracts/interfaces/hooks/IPostDispatchHook.sol';
-import {OwnableMulticall} from '@hyperlane-updated/contracts/middleware/libs/OwnableMulticall.sol';
+import {OwnableMulticall} from '@hyperlane/core/contracts/middleware/libs/OwnableMulticall.sol';
 import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
 
 import {IInterchainAccountRouter} from 'contracts/interfaces/external/IInterchainAccountRouter.sol';
@@ -66,27 +66,19 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         // Encode ICA calls
         CallLib.Call[] memory calls = new CallLib.Call[](2);
         calls[0] = CallLib.build({
-            to: OPEN_USDT_ADDRESS,
-            value: 0,
-            data: abi.encodeCall(ERC20.approve, (address(leafRouter), amountIn))
+            to: OPEN_USDT_ADDRESS, value: 0, data: abi.encodeCall(ERC20.approve, (address(leafRouter), amountIn))
         });
         calls[1] = CallLib.build({
-            to: address(leafRouter),
-            value: 0,
-            data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
+            to: address(leafRouter), value: 0, data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
         });
 
         // Calculate commitment hash
         bytes32 commitment = hashCommitment({_calls: calls, _salt: TypeCasts.addressToBytes32(users.alice)});
 
         // Predict User's ICA address
-        address payable userICA = payable(
-            rootIcaRouter.getRemoteInterchainAccount({
-                _destination: leafDomain,
-                _owner: address(router),
-                _userSalt: TypeCasts.addressToBytes32(users.alice)
-            })
-        );
+        address payable userICA = payable(rootIcaRouter.getRemoteInterchainAccount({
+                _destination: leafDomain, _owner: address(router), _userSalt: TypeCasts.addressToBytes32(users.alice)
+            }));
 
         // Encode origin chain commands
         bytes memory commands =
@@ -209,27 +201,19 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         // Encode ICA calls
         CallLib.Call[] memory calls = new CallLib.Call[](2);
         calls[0] = CallLib.build({
-            to: OPEN_USDT_ADDRESS,
-            value: 0,
-            data: abi.encodeCall(ERC20.approve, (address(leafRouter), amountInMax))
+            to: OPEN_USDT_ADDRESS, value: 0, data: abi.encodeCall(ERC20.approve, (address(leafRouter), amountInMax))
         });
         calls[1] = CallLib.build({
-            to: address(leafRouter),
-            value: 0,
-            data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
+            to: address(leafRouter), value: 0, data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
         });
 
         // Calculate commitment hash
         bytes32 commitment = hashCommitment({_calls: calls, _salt: TypeCasts.addressToBytes32(users.alice)});
 
         // Predict User's ICA address
-        address payable userICA = payable(
-            rootIcaRouter.getRemoteInterchainAccount({
-                _destination: leafDomain,
-                _owner: address(router),
-                _userSalt: TypeCasts.addressToBytes32(users.alice)
-            })
-        );
+        address payable userICA = payable(rootIcaRouter.getRemoteInterchainAccount({
+                _destination: leafDomain, _owner: address(router), _userSalt: TypeCasts.addressToBytes32(users.alice)
+            }));
 
         // Encode origin chain commands
         bytes memory commands =
@@ -320,13 +304,13 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         OwnableMulticall(userICA).revealAndExecute({calls: calls, salt: TypeCasts.addressToBytes32(users.alice)});
 
         assertEq(ERC20(OPEN_USDT_ADDRESS).balanceOf(userICA), 0);
-        assertEq(ERC20(OPEN_USDT_ADDRESS).balanceOf(users.alice), 99383); //leftover from swap is sent to user
+        assertEq(ERC20(OPEN_USDT_ADDRESS).balanceOf(users.alice), 100100); //leftover from swap is sent to user
         assertEq(ERC20(baseUSDC).balanceOf(users.alice), amountOut);
         assertEq(ERC20(OPEN_USDT_ADDRESS).allowance(userICA, address(leafRouter)), 0);
     }
 
     function test_executeCrosschainFlowMultichainV3SwapExactIn() public {
-        uint256 destinationAmountOutMin = 3000000;
+        uint256 destinationAmountOutMin = 5800000;
 
         // Encode destination swap
         bytes memory swapSubplan =
@@ -359,31 +343,23 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             data: abi.encodeCall(ERC20.approve, (address(leafRouter), type(uint256).max))
         });
         calls[1] = CallLib.build({
-            to: address(leafRouter),
-            value: 0,
-            data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
+            to: address(leafRouter), value: 0, data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
         });
         calls[2] = CallLib.build({
-            to: OPEN_USDT_ADDRESS,
-            value: 0,
-            data: abi.encodeCall(ERC20.approve, (address(leafRouter), 0))
+            to: OPEN_USDT_ADDRESS, value: 0, data: abi.encodeCall(ERC20.approve, (address(leafRouter), 0))
         });
 
         // Calculate commitment hash
         bytes32 commitment = hashCommitment({_calls: calls, _salt: TypeCasts.addressToBytes32(users.alice)});
 
         // Predict User's ICA address
-        address payable userICA = payable(
-            rootIcaRouter.getRemoteInterchainAccount({
-                _destination: leafDomain,
-                _owner: address(router),
-                _userSalt: TypeCasts.addressToBytes32(users.alice)
-            })
-        );
+        address payable userICA = payable(rootIcaRouter.getRemoteInterchainAccount({
+                _destination: leafDomain, _owner: address(router), _userSalt: TypeCasts.addressToBytes32(users.alice)
+            }));
 
         // Encode origin chain commands
         uint256 amountIn = 10 ether;
-        uint256 originAmountOutMin = 3000000;
+        uint256 originAmountOutMin = 5800000;
         bytes memory commands = abi.encodePacked(
             bytes1(uint8(Commands.V3_SWAP_EXACT_IN)),
             bytes1(uint8(Commands.BRIDGE_TOKEN)),
@@ -513,27 +489,19 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         // Encode ICA calls
         CallLib.Call[] memory calls = new CallLib.Call[](2);
         calls[0] = CallLib.build({
-            to: OPEN_USDT_ADDRESS,
-            value: 0,
-            data: abi.encodeCall(ERC20.approve, (address(leafRouter), amountIn))
+            to: OPEN_USDT_ADDRESS, value: 0, data: abi.encodeCall(ERC20.approve, (address(leafRouter), amountIn))
         });
         calls[1] = CallLib.build({
-            to: address(leafRouter),
-            value: 0,
-            data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
+            to: address(leafRouter), value: 0, data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
         });
 
         // Calculate commitment hash
         bytes32 commitment = hashCommitment({_calls: calls, _salt: TypeCasts.addressToBytes32(users.alice)});
 
         // Predict User's ICA address
-        address payable userICA = payable(
-            rootIcaRouter.getRemoteInterchainAccount({
-                _destination: leafDomain,
-                _owner: address(router),
-                _userSalt: TypeCasts.addressToBytes32(users.alice)
-            })
-        );
+        address payable userICA = payable(rootIcaRouter.getRemoteInterchainAccount({
+                _destination: leafDomain, _owner: address(router), _userSalt: TypeCasts.addressToBytes32(users.alice)
+            }));
 
         // Encode origin chain commands
         bytes memory commands =
@@ -656,27 +624,19 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         // Encode ICA calls
         CallLib.Call[] memory calls = new CallLib.Call[](2);
         calls[0] = CallLib.build({
-            to: OPEN_USDT_ADDRESS,
-            value: 0,
-            data: abi.encodeCall(ERC20.approve, (address(leafRouter), amountInMax))
+            to: OPEN_USDT_ADDRESS, value: 0, data: abi.encodeCall(ERC20.approve, (address(leafRouter), amountInMax))
         });
         calls[1] = CallLib.build({
-            to: address(leafRouter),
-            value: 0,
-            data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
+            to: address(leafRouter), value: 0, data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
         });
 
         // Calculate commitment hash
         bytes32 commitment = hashCommitment({_calls: calls, _salt: TypeCasts.addressToBytes32(users.alice)});
 
         // Predict User's ICA address
-        address payable userICA = payable(
-            rootIcaRouter.getRemoteInterchainAccount({
-                _destination: leafDomain,
-                _owner: address(router),
-                _userSalt: TypeCasts.addressToBytes32(users.alice)
-            })
-        );
+        address payable userICA = payable(rootIcaRouter.getRemoteInterchainAccount({
+                _destination: leafDomain, _owner: address(router), _userSalt: TypeCasts.addressToBytes32(users.alice)
+            }));
 
         // Encode origin chain commands
         bytes memory commands =
@@ -806,27 +766,19 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             data: abi.encodeCall(ERC20.approve, (address(leafRouter), type(uint256).max))
         });
         calls[1] = CallLib.build({
-            to: address(leafRouter),
-            value: 0,
-            data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
+            to: address(leafRouter), value: 0, data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
         });
         calls[2] = CallLib.build({
-            to: OPEN_USDT_ADDRESS,
-            value: 0,
-            data: abi.encodeCall(ERC20.approve, (address(leafRouter), 0))
+            to: OPEN_USDT_ADDRESS, value: 0, data: abi.encodeCall(ERC20.approve, (address(leafRouter), 0))
         });
 
         // Calculate commitment hash
         bytes32 commitment = hashCommitment({_calls: calls, _salt: TypeCasts.addressToBytes32(users.alice)});
 
         // Predict User's ICA address
-        address payable userICA = payable(
-            rootIcaRouter.getRemoteInterchainAccount({
-                _destination: leafDomain,
-                _owner: address(router),
-                _userSalt: TypeCasts.addressToBytes32(users.alice)
-            })
-        );
+        address payable userICA = payable(rootIcaRouter.getRemoteInterchainAccount({
+                _destination: leafDomain, _owner: address(router), _userSalt: TypeCasts.addressToBytes32(users.alice)
+            }));
 
         // Encode origin chain commands
         uint256 amountIn = 10 * USDC_1;
@@ -962,27 +914,19 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         // Encode ICA calls
         CallLib.Call[] memory calls = new CallLib.Call[](2);
         calls[0] = CallLib.build({
-            to: OPEN_USDT_ADDRESS,
-            value: 0,
-            data: abi.encodeCall(ERC20.approve, (address(leafRouter), amountIn))
+            to: OPEN_USDT_ADDRESS, value: 0, data: abi.encodeCall(ERC20.approve, (address(leafRouter), amountIn))
         });
         calls[1] = CallLib.build({
-            to: address(leafRouter),
-            value: 0,
-            data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
+            to: address(leafRouter), value: 0, data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
         });
 
         // Calculate commitment hash
         bytes32 commitment = hashCommitment({_calls: calls, _salt: TypeCasts.addressToBytes32(users.alice)});
 
         // Predict User's ICA address
-        address payable userICA = payable(
-            rootIcaRouter.getRemoteInterchainAccount({
-                _destination: leafDomain,
-                _owner: address(router),
-                _userSalt: TypeCasts.addressToBytes32(users.alice)
-            })
-        );
+        address payable userICA = payable(rootIcaRouter.getRemoteInterchainAccount({
+                _destination: leafDomain, _owner: address(router), _userSalt: TypeCasts.addressToBytes32(users.alice)
+            }));
 
         // Encode origin chain commands
         bytes memory commands =
@@ -1119,27 +1063,19 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         // Encode ICA calls
         CallLib.Call[] memory calls = new CallLib.Call[](2);
         calls[0] = CallLib.build({
-            to: OPEN_USDT_ADDRESS,
-            value: 0,
-            data: abi.encodeCall(ERC20.approve, (address(leafRouter), v3AmountIn))
+            to: OPEN_USDT_ADDRESS, value: 0, data: abi.encodeCall(ERC20.approve, (address(leafRouter), v3AmountIn))
         });
         calls[1] = CallLib.build({
-            to: address(leafRouter),
-            value: 0,
-            data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
+            to: address(leafRouter), value: 0, data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
         });
 
         // Calculate commitment hash
         bytes32 commitment = hashCommitment({_calls: calls, _salt: TypeCasts.addressToBytes32(users.alice)});
 
         // Predict User's ICA address
-        address payable userICA = payable(
-            rootIcaRouter.getRemoteInterchainAccount({
-                _destination: leafDomain,
-                _owner: address(router),
-                _userSalt: TypeCasts.addressToBytes32(users.alice)
-            })
-        );
+        address payable userICA = payable(rootIcaRouter.getRemoteInterchainAccount({
+                _destination: leafDomain, _owner: address(router), _userSalt: TypeCasts.addressToBytes32(users.alice)
+            }));
 
         // Encode origin chain commands
         bytes memory commands =
@@ -1298,27 +1234,19 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         // Encode ICA calls
         CallLib.Call[] memory calls = new CallLib.Call[](2);
         calls[0] = CallLib.build({
-            to: OPEN_USDT_ADDRESS,
-            value: 0,
-            data: abi.encodeCall(ERC20.approve, (address(leafRouter), v3AmountIn))
+            to: OPEN_USDT_ADDRESS, value: 0, data: abi.encodeCall(ERC20.approve, (address(leafRouter), v3AmountIn))
         });
         calls[1] = CallLib.build({
-            to: address(leafRouter),
-            value: 0,
-            data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
+            to: address(leafRouter), value: 0, data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
         });
 
         // Calculate commitment hash
         bytes32 commitment = hashCommitment({_calls: calls, _salt: TypeCasts.addressToBytes32(users.alice)});
 
         // Predict User's ICA address
-        address payable userICA = payable(
-            rootIcaRouter.getRemoteInterchainAccount({
-                _destination: leafDomain,
-                _owner: address(router),
-                _userSalt: TypeCasts.addressToBytes32(users.alice)
-            })
-        );
+        address payable userICA = payable(rootIcaRouter.getRemoteInterchainAccount({
+                _destination: leafDomain, _owner: address(router), _userSalt: TypeCasts.addressToBytes32(users.alice)
+            }));
 
         // Encode origin chain commands
         bytes memory commands =
@@ -1475,27 +1403,19 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         // Encode ICA calls
         CallLib.Call[] memory calls = new CallLib.Call[](2);
         calls[0] = CallLib.build({
-            to: OPEN_USDT_ADDRESS,
-            value: 0,
-            data: abi.encodeCall(ERC20.approve, (address(leafRouter), v3AmountIn))
+            to: OPEN_USDT_ADDRESS, value: 0, data: abi.encodeCall(ERC20.approve, (address(leafRouter), v3AmountIn))
         });
         calls[1] = CallLib.build({
-            to: address(leafRouter),
-            value: 0,
-            data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
+            to: address(leafRouter), value: 0, data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
         });
 
         // Calculate commitment hash
         bytes32 commitment = hashCommitment({_calls: calls, _salt: TypeCasts.addressToBytes32(users.alice)});
 
         // Predict User's ICA address
-        address payable userICA = payable(
-            rootIcaRouter.getRemoteInterchainAccount({
-                _destination: leafDomain,
-                _owner: address(router),
-                _userSalt: TypeCasts.addressToBytes32(users.alice)
-            })
-        );
+        address payable userICA = payable(rootIcaRouter.getRemoteInterchainAccount({
+                _destination: leafDomain, _owner: address(router), _userSalt: TypeCasts.addressToBytes32(users.alice)
+            }));
 
         // Encode origin chain commands
         bytes memory commands =
@@ -1637,27 +1557,19 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         // Encode ICA calls
         CallLib.Call[] memory calls = new CallLib.Call[](2);
         calls[0] = CallLib.build({
-            to: OPEN_USDT_ADDRESS,
-            value: 0,
-            data: abi.encodeCall(ERC20.approve, (address(leafRouter), amountIn))
+            to: OPEN_USDT_ADDRESS, value: 0, data: abi.encodeCall(ERC20.approve, (address(leafRouter), amountIn))
         });
         calls[1] = CallLib.build({
-            to: address(leafRouter),
-            value: 0,
-            data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
+            to: address(leafRouter), value: 0, data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
         });
 
         // Calculate commitment hash
         bytes32 commitment = hashCommitment({_calls: calls, _salt: TypeCasts.addressToBytes32(users.alice)});
 
         // Predict User's ICA address
-        address payable userICA = payable(
-            rootIcaRouter.getRemoteInterchainAccount({
-                _destination: leafDomain,
-                _owner: address(router),
-                _userSalt: TypeCasts.addressToBytes32(users.alice)
-            })
-        );
+        address payable userICA = payable(rootIcaRouter.getRemoteInterchainAccount({
+                _destination: leafDomain, _owner: address(router), _userSalt: TypeCasts.addressToBytes32(users.alice)
+            }));
 
         // Encode origin chain commands
         bytes memory commands =
@@ -1769,13 +1681,9 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         uint256 amount = USDC_1;
 
         // Predict User's ICA address
-        address payable userICA = payable(
-            rootIcaRouter.getRemoteInterchainAccount({
-                _destination: leafDomain,
-                _owner: address(router),
-                _userSalt: TypeCasts.addressToBytes32(users.alice)
-            })
-        );
+        address payable userICA = payable(rootIcaRouter.getRemoteInterchainAccount({
+                _destination: leafDomain, _owner: address(router), _userSalt: TypeCasts.addressToBytes32(users.alice)
+            }));
 
         // Bridge tokens to User's ICA to simulate stuck funds
         bytes memory commands = abi.encodePacked(bytes1(uint8(Commands.BRIDGE_TOKEN)));
@@ -1809,9 +1717,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         // Encode refund ICA call
         CallLib.Call[] memory calls = new CallLib.Call[](1);
         calls[0] = CallLib.build({
-            to: OPEN_USDT_ADDRESS,
-            value: 0,
-            data: abi.encodeCall(ERC20.transfer, (users.alice, amount))
+            to: OPEN_USDT_ADDRESS, value: 0, data: abi.encodeCall(ERC20.transfer, (users.alice, amount))
         });
 
         // Calculate commitment hash
@@ -1935,8 +1841,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         uint256 destinationAmountOutMin = 9e5;
         uint256 leftoverETH = MESSAGE_FEE / 2;
 
-        (address payable userICA, CallLib.Call[] memory calls, bytes memory commands, bytes[] memory inputs) =
-        _executeCrosschainParams({
+        (address payable userICA, CallLib.Call[] memory calls, bytes memory commands, bytes[] memory inputs) = _executeCrosschainParams({
             _amountIn: amountIn,
             _originAmountOutMin: originAmountOutMin,
             _destinationAmountOutMin: destinationAmountOutMin,
@@ -1966,8 +1871,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
         uint256 destinationAmountOutMin = amountIn * 10;
         uint256 leftoverETH = MESSAGE_FEE / 2;
 
-        (address payable userICA, CallLib.Call[] memory calls, bytes memory commands, bytes[] memory inputs) =
-        _executeCrosschainParams({
+        (address payable userICA, CallLib.Call[] memory calls, bytes memory commands, bytes[] memory inputs) = _executeCrosschainParams({
             _amountIn: amountIn,
             _originAmountOutMin: originAmountOutMin,
             _destinationAmountOutMin: destinationAmountOutMin,
@@ -2033,27 +1937,19 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             data: abi.encodeCall(ERC20.approve, (address(leafRouter), type(uint256).max))
         });
         calls[1] = CallLib.build({
-            to: address(leafRouter),
-            value: 0,
-            data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
+            to: address(leafRouter), value: 0, data: abi.encodeCall(Dispatcher.execute, (leafCommands, leafInputs))
         });
         calls[2] = CallLib.build({
-            to: OPEN_USDT_ADDRESS,
-            value: 0,
-            data: abi.encodeCall(ERC20.approve, (address(leafRouter), 0))
+            to: OPEN_USDT_ADDRESS, value: 0, data: abi.encodeCall(ERC20.approve, (address(leafRouter), 0))
         });
 
         // Calculate commitment hash
         bytes32 commitment = hashCommitment({_calls: calls, _salt: TypeCasts.addressToBytes32(users.alice)});
 
         // Predict User's ICA address
-        userICA = payable(
-            rootIcaRouter.getRemoteInterchainAccount({
-                _destination: leafDomain,
-                _owner: address(router),
-                _userSalt: TypeCasts.addressToBytes32(users.alice)
-            })
-        );
+        userICA = payable(rootIcaRouter.getRemoteInterchainAccount({
+                _destination: leafDomain, _owner: address(router), _userSalt: TypeCasts.addressToBytes32(users.alice)
+            }));
 
         // Encode origin chain commands
         commands = abi.encodePacked(

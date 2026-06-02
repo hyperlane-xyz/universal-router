@@ -15,7 +15,11 @@ contract DeployArbitrum is DeployUniversalRouter {
             veloV2Factory: address(0),
             veloCLFactory: address(0),
             veloV2InitCodeHash: bytes32(0),
-            veloCLInitCodeHash: bytes32(0)
+            veloCLInitCodeHash: bytes32(0),
+            veloCLFactory2: address(0),
+            veloCLInitCodeHash2: bytes32(0),
+            veloCLFactory3: address(0),
+            veloCLInitCodeHash3: bytes32(0)
         });
 
         outputFilename = 'arbitrum.json';

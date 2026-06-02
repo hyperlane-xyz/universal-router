@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 import 'forge-std/console.sol';
 import 'forge-std/Script.sol';
-import {Permit2} from 'permit2/src/Permit2.sol';
 import {RouterDeployParameters} from 'contracts/types/RouterDeployParameters.sol';
 import {UnsupportedProtocol} from 'contracts/deploy/UnsupportedProtocol.sol';
 import {UniversalRouter} from 'contracts/UniversalRouter.sol';
@@ -28,16 +27,23 @@ abstract contract DeployUniversalRouter is Script, Constants {
         address veloCLFactory;
         bytes32 veloV2InitCodeHash;
         bytes32 veloCLInitCodeHash;
+        address veloCLFactory2;
+        bytes32 veloCLInitCodeHash2;
+        address veloCLFactory3;
+        bytes32 veloCLInitCodeHash3;
     }
 
     DeploymentParameters internal params;
     RouterDeployParameters internal routerParams;
     UniversalRouter public router;
 
-    address public permit2 = 0x5588D72a123472067a644756a3Eef50034B9f16b;
-    address public unsupported = 0x2836F1486dCFE293ffd0c441f2DE06d751D0d4BE;
+    // Canonical Uniswap Permit2 — deployed on all target chains, no custom deploy needed.
+    address public permit2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+    // Computed from deployer + UNSUPPORTED_PROTOCOL_ENTROPY at run time — do not hardcode.
+    address public unsupported;
 
-    address public deployer = 0x9Bd11B31c67609Ba3772077A86cc5224e7CAE21A;
+    // TODO: replace with Hyperlane deployer once available
+    address public deployer = 0x1cFd6A81e98de59e3eeB3AE35c3cb13FCb586E1E;
 
     address constant UNSUPPORTED_PROTOCOL = address(0);
     bytes32 constant BYTES32_ZERO = bytes32(0);
@@ -51,7 +57,18 @@ abstract contract DeployUniversalRouter is Script, Constants {
     function setUp() public virtual;
 
     function run() external {
+        unsupported = UNSUPPORTED_PROTOCOL_ENTROPY.computeCreate3Address({_deployer: deployer});
         vm.startBroadcast(deployer);
+
+        if (unsupported.code.length == 0) {
+            unsupported = cx.deployCreate3({
+                salt: UNSUPPORTED_PROTOCOL_ENTROPY.calculateSalt({_deployer: deployer}),
+                initCode: abi.encodePacked(type(UnsupportedProtocol).creationCode)
+            });
+            console.log('UnsupportedProtocol deployed:', unsupported);
+        } else {
+            console.log('UnsupportedProtocol already deployed:', unsupported);
+        }
 
         routerParams = RouterDeployParameters({
             permit2: permit2,
@@ -64,7 +81,11 @@ abstract contract DeployUniversalRouter is Script, Constants {
             veloV2Factory: mapUnsupported(params.veloV2Factory),
             veloCLFactory: mapUnsupported(params.veloCLFactory),
             veloV2InitCodeHash: params.veloV2InitCodeHash,
-            veloCLInitCodeHash: params.veloCLInitCodeHash
+            veloCLInitCodeHash: params.veloCLInitCodeHash,
+            veloCLFactory2: mapUnsupported(params.veloCLFactory2),
+            veloCLInitCodeHash2: params.veloCLInitCodeHash2,
+            veloCLFactory3: mapUnsupported(params.veloCLFactory3),
+            veloCLInitCodeHash3: params.veloCLInitCodeHash3
         });
 
         deploy();
@@ -77,14 +98,21 @@ abstract contract DeployUniversalRouter is Script, Constants {
     }
 
     function deploy() internal virtual {
-        router = UniversalRouter(
-            payable(cx.deployCreate3({
-                    salt: UNIVERSAL_ROUTER_ENTROPY_V4.calculateSalt({_deployer: deployer}),
-                    initCode: abi.encodePacked(type(UniversalRouter).creationCode, abi.encode(routerParams))
-                }))
-        );
+        address computedRouter = UNIVERSAL_ROUTER_ENTROPY_V7.computeCreate3Address({_deployer: deployer});
 
-        checkAddress({_entropy: UNIVERSAL_ROUTER_ENTROPY_V4, _output: address(router)});
+        if (computedRouter.code.length == 0) {
+            router = UniversalRouter(
+                payable(cx.deployCreate3({
+                        salt: UNIVERSAL_ROUTER_ENTROPY_V7.calculateSalt({_deployer: deployer}),
+                        initCode: abi.encodePacked(type(UniversalRouter).creationCode, abi.encode(routerParams))
+                    }))
+            );
+        } else {
+            router = UniversalRouter(payable(computedRouter));
+            console.log('Universal Router already deployed:', address(router));
+        }
+
+        checkAddress({_entropy: UNIVERSAL_ROUTER_ENTROPY_V7, _output: address(router)});
     }
 
     function logParams() internal view {

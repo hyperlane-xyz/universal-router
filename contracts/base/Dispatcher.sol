@@ -141,14 +141,15 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                             permitBatch := add(inputs.offset, calldataload(inputs.offset))
                         }
                         bytes calldata data = inputs.toBytes(1);
-                        (success, output) = address(PERMIT2).call(
-                            abi.encodeWithSignature(
-                                'permit(address,((address,uint160,uint48,uint48)[],address,uint256),bytes)',
-                                msgSender(),
-                                permitBatch,
-                                data
-                            )
-                        );
+                        (success, output) = address(PERMIT2)
+                            .call(
+                                abi.encodeWithSignature(
+                                    'permit(address,((address,uint160,uint48,uint48)[],address,uint256),bytes)',
+                                    msgSender(),
+                                    permitBatch,
+                                    data
+                                )
+                            );
                     } else if (command == Commands.SWEEP) {
                         // equivalent:  abi.decode(inputs, (address, address, uint256))
                         address token;
@@ -260,14 +261,15 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                             permitSingle := inputs.offset
                         }
                         bytes calldata data = inputs.toBytes(6); // PermitSingle takes first 6 slots (0..5)
-                        (success, output) = address(PERMIT2).call(
-                            abi.encodeWithSignature(
-                                'permit(address,((address,uint160,uint48,uint48),address,uint256),bytes)',
-                                msgSender(),
-                                permitSingle,
-                                data
-                            )
-                        );
+                        (success, output) = address(PERMIT2)
+                            .call(
+                                abi.encodeWithSignature(
+                                    'permit(address,((address,uint160,uint48,uint48),address,uint256),bytes)',
+                                    msgSender(),
+                                    permitSingle,
+                                    data
+                                )
+                            );
                     } else if (command == Commands.WRAP_ETH) {
                         // equivalent: abi.decode(inputs, (address, uint256))
                         address recipient;
@@ -336,7 +338,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                     uint256 msgFee;
                     uint256 maxTokenFee;
                     uint32 domain;
-                    bool payerIsUser;
+                    address payer;
                     assembly {
                         bridgeType := calldataload(inputs.offset)
                         recipient := calldataload(add(inputs.offset, 0x20))
@@ -346,15 +348,23 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         msgFee := calldataload(add(inputs.offset, 0xA0))
                         maxTokenFee := calldataload(add(inputs.offset, 0xC0))
                         domain := calldataload(add(inputs.offset, 0xE0))
-                        payerIsUser := calldataload(add(inputs.offset, 0x100))
                     }
-                    address sender = msgSender();
-                    address payer = payerIsUser ? sender : address(this);
-                    recipient = recipient == ActionConstants.MSG_SENDER ? sender : recipient;
-                    if (amount == ActionConstants.CONTRACT_BALANCE) amount = ERC20(token).balanceOf(address(this));
+                    {
+                        address sender = msgSender();
+                        bool payerIsUser;
+                        assembly {
+                            payerIsUser := calldataload(add(inputs.offset, 0x100))
+                        }
+                        payer = payerIsUser ? sender : address(this);
+                        recipient = recipient == ActionConstants.MSG_SENDER ? sender : recipient;
+                    }
+                    if (amount == ActionConstants.CONTRACT_BALANCE) {
+                        amount =
+                            token == Constants.ETH ? address(this).balance : ERC20(token).balanceOf(address(this));
+                    }
                     bridgeToken({
                         bridgeType: bridgeType,
-                        sender: sender,
+                        sender: msgSender(),
                         recipient: recipient,
                         token: token,
                         bridge: bridge,
@@ -365,11 +375,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         payer: payer
                     });
                     emit UniversalRouterBridge({
-                        sender: sender,
-                        recipient: recipient,
-                        token: token,
-                        amount: amount,
-                        domain: domain
+                        sender: msgSender(), recipient: recipient, token: token, amount: amount, domain: domain
                     });
                 } else if (command == Commands.EXECUTE_CROSS_CHAIN) {
                     // equivalent: abi.decode(inputs, (uint32, address, bytes32, bytes32, bytes32, uint256, address, uint256, address, bytes))
@@ -407,10 +413,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         _commitment: commitment
                     });
                     emit CrossChainSwap({
-                        caller: msgSender(),
-                        localRouter: icaRouter,
-                        destinationDomain: domain,
-                        commitment: commitment
+                        caller: msgSender(), localRouter: icaRouter, destinationDomain: domain, commitment: commitment
                     });
                 } else {
                     // placeholder area for commands 0x14-0x20

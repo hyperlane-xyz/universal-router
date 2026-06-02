@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test} from 'forge-std/Test.sol';
-import {Quote, ITokenBridge as IHypTokenBridge} from '@hyperlane-updated/contracts/interfaces/ITokenBridge.sol';
+import {Quote, ITokenFee} from '@hyperlane/core/contracts/interfaces/ITokenBridge.sol';
 import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
 import {BridgeRouter} from '../../../contracts/modules/bridge/BridgeRouter.sol';
 import {PaymentsParameters, PaymentsImmutables} from '../../../contracts/modules/PaymentsImmutables.sol';
@@ -46,7 +46,7 @@ contract QuoteExactInputTest is Test {
         bytes32 recipientBytes32 = TypeCasts.addressToBytes32(RECIPIENT);
         vm.mockCall(
             BRIDGE,
-            abi.encodeCall(IHypTokenBridge.quoteTransferRemote, (DOMAIN, recipientBytes32, amount)),
+            abi.encodeCall(ITokenFee.quoteTransferRemote, (DOMAIN, recipientBytes32, amount)),
             abi.encode(quotesArr)
         );
     }

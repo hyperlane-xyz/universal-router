@@ -35,8 +35,8 @@ abstract contract TestConstants {
 
     address public constant OPEN_USDT_OPTIMISM_MAILBOX_ADDRESS = 0xd4C1905BB1D26BC93DAC913e13CaCC278CdCC80D;
     address public constant OPEN_USDT_BASE_MAILBOX_ADDRESS = 0xeA87ae93Fa0019a82A727bfd3eBd1cFCa8f64f1D;
-    address payable public constant OPTIMISM_ROUTER_ICA_ADDRESS = payable(0x44c74D3d791cb4588732A9C9CEdbCb262875A3bE);
-    address payable public constant BASE_ROUTER_ICA_ADDRESS = payable(0xed1eaFE233a6d36A77Ee726A22Fd19b390c84B21);
+    address payable public constant OPTIMISM_ROUTER_ICA_ADDRESS = payable(0x3E343D07D024E657ECF1f8Ae8bb7a12f08652E75);
+    address payable public constant BASE_ROUTER_ICA_ADDRESS = payable(0x44647Cd983E80558793780f9a0c7C2aa9F384D07);
 
     address public constant OPEN_USDT_OPTIMISM_ISM_ADDRESS = 0x6d5dC676B03f5252c976EBa33d629fF15F03Be16;
     address public constant OPEN_USDT_BASE_ISM_ADDRESS = 0x9C53d53B652Feb2014aC6719E1Cd42B5B24B4A28;
@@ -104,8 +104,25 @@ abstract contract TestConstants {
         )
     );
 
+    // Base specific CL Factory
+    ICLFactory constant CL_FACTORY_BASE = ICLFactory(0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A);
+    bytes32 constant CL_POOL_INIT_CODE_HASH_BASE = 0xffb9af9ea6d9e39da47392ecc7055277b9915b8bfc9f83f105821b7791a6ae30;
+
+    ICLFactory constant CL_FACTORY_2 = ICLFactory(0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a);
+    bytes32 constant CL_POOL_INIT_CODE_HASH_2 = keccak256(
+        abi.encodePacked(
+            hex'3d602d80600a3d3981f3363d3d373d3d3d363d73',
+            0x942e97a4c6FdC38B4CD1c0298D37d81fDD8E5A16,
+            hex'5af43d82803e903d91602b57fd5bf3'
+        )
+    );
+
     INonfungiblePositionManagerCL constant NFT =
         INonfungiblePositionManagerCL(0x416b433906b1B72FA758e166e239c43d68dC6F29);
+    INonfungiblePositionManagerCL constant NFT_BASE =
+        INonfungiblePositionManagerCL(0x827922686190790b37229fd06084350E74485b72);
+    INonfungiblePositionManagerCL constant NFT_2 =
+        INonfungiblePositionManagerCL(0xa990C6a764b73BF43cee5Bb40339c3322FB9D55F);
 
     // Tokens
     ERC20 constant VELO = ERC20(0x3c8B650257cFb5f272f799F5e2b4e65093a11a05);
@@ -116,4 +133,11 @@ abstract contract TestConstants {
     ERC20 constant WETH = ERC20(WETH9_ADDRESS);
     int24 constant TICK_SPACING = 200;
     uint24 constant FEE = 500;
+    // Tokens on Base
+    ERC20 constant USDC_BASE = ERC20(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
+    ERC20 constant USDT_BASE = ERC20(0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2);
+    ERC20 constant DAI_BASE = ERC20(0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb);
+
+    // Constants for pool flag
+    uint24 constant TICK_SPACING_WITH_FLAG = uint24(TICK_SPACING) | 0x100000;
 }

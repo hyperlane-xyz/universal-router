@@ -11,9 +11,11 @@ echo "       • Velodrome parameters (configured for superchain - update for no
 echo "    ✅ Script will NOT broadcast newly created template files - review first!"
 echo ""
 
-# Load environment variables
+# Load environment variables and export them so forge can see them
 if [ -f .env ]; then
+    set -a
     source .env
+    set +a
 fi
 
 # Check if required arguments are provided
@@ -80,9 +82,11 @@ if forge script ${SCRIPT_PATH} --slow --rpc-url ${CHAIN_NAME} -vvvv; then
     
     # Determine verifier based on chain name
     case "$CHAIN_NAME" in
-        "arbitrum"|"base"|"bsc"|"celo"|"ethereum"|"fraxtal"|"optimism"|"polygon")
+        "arbitrum"|"base"|"bsc"|"celo"|"ethereum"|"fraxtal"|"optimism"|"polygon"|"unichain")
             echo "Using etherscan verifier for ${CHAIN_NAME}"
-            VERIFIER_ARGS="--verify --verifier etherscan"
+            ETHERSCAN_KEY_VAR=$(echo "${CHAIN_NAME}_ETHERSCAN_API_KEY" | tr '[:lower:]' '[:upper:]')
+            ETHERSCAN_KEY=$(eval echo \$${ETHERSCAN_KEY_VAR})
+            VERIFIER_ARGS="--verify --verifier etherscan --etherscan-api-key $ETHERSCAN_KEY"
             ;;
         *)
             echo "Using blockscout verifier for ${CHAIN_NAME}"
@@ -101,7 +105,7 @@ if forge script ${SCRIPT_PATH} --slow --rpc-url ${CHAIN_NAME} -vvvv; then
     esac
 
     echo "Simulation successful! Proceeding with deployment..."
-    forge script ${SCRIPT_PATH} --slow --rpc-url ${CHAIN_NAME} ${VERIFIER_ARGS} ${ADDITIONAL_ARGS} -vvvv
+    forge script ${SCRIPT_PATH} --slow --rpc-url ${CHAIN_NAME} --private-key ${PRIVATE_KEY} ${VERIFIER_ARGS} ${ADDITIONAL_ARGS} -vvvv
 else
     echo "Simulation failed! Please check the output above for errors."
     exit 1

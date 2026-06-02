@@ -3,14 +3,12 @@ pragma solidity ^0.8.24;
 
 import {ERC20} from 'solmate/src/tokens/ERC20.sol';
 import {SafeTransferLib} from 'solmate/src/utils/SafeTransferLib.sol';
-import {HypXERC20} from '@hyperlane/core/contracts/token/extensions/HypXERC20.sol';
-import {HypERC20Collateral} from '@hyperlane/core/contracts/token/HypERC20Collateral.sol';
-import {StandardHookMetadata} from '@hyperlane/core/contracts/hooks/libs/StandardHookMetadata.sol';
 import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
+import {ITokenBridge, Quote, ITokenFee} from '@hyperlane/core/contracts/interfaces/ITokenBridge.sol';
 
-import {ITokenBridge} from '../../interfaces/external/ITokenBridge.sol';
-import {Quote, ITokenBridge as IHypTokenBridge} from '@hyperlane-updated/contracts/interfaces/ITokenBridge.sol';
+import {IXVeloTokenBridge} from '../../interfaces/external/IXVeloTokenBridge.sol';
 import {BridgeTypes} from '../../libraries/BridgeTypes.sol';
+import {Constants} from '../../libraries/Constants.sol';
 import {Permit2Payments} from './../Permit2Payments.sol';
 
 /// @title BridgeRouter
@@ -51,73 +49,49 @@ abstract contract BridgeRouter is Permit2Payments {
         if (recipient == address(0)) revert InvalidRecipient();
 
         if (bridgeType == BridgeTypes.HYP_XERC20) {
-            if (address(HypXERC20(bridge).wrappedToken()) != token) revert InvalidTokenAddress();
-
             prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
 
-            executeHypXERC20Bridge({
-                bridge: bridge,
-                sender: sender,
-                recipient: recipient,
-                amount: amount,
-                msgFee: msgFee,
-                domain: domain
-            });
+            executeHypBridge({bridge: bridge, recipient: recipient, amount: amount, msgFee: msgFee, domain: domain});
             ERC20(token).safeApprove({to: bridge, amount: 0});
         } else if (bridgeType == BridgeTypes.XVELO) {
-            address _bridgeToken =
-                block.chainid == OPTIMISM_CHAIN_ID ? ITokenBridge(bridge).erc20() : ITokenBridge(bridge).xerc20();
+            address _bridgeToken = block.chainid == OPTIMISM_CHAIN_ID
+                ? IXVeloTokenBridge(bridge).erc20()
+                : IXVeloTokenBridge(bridge).xerc20();
             if (_bridgeToken != token) revert InvalidTokenAddress();
 
             prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
 
             executeXVELOBridge({
-                bridge: bridge,
-                sender: sender,
-                recipient: recipient,
-                amount: amount,
-                msgFee: msgFee,
-                domain: domain
+                bridge: bridge, sender: sender, recipient: recipient, amount: amount, msgFee: msgFee, domain: domain
             });
             ERC20(token).safeApprove({to: bridge, amount: 0});
         } else if (bridgeType == BridgeTypes.HYP_ERC20_COLLATERAL) {
-            if (address(HypERC20Collateral(bridge).wrappedToken()) != token) revert InvalidTokenAddress();
-
             uint256 bridgeAmount = quoteExactInputBridgeAmount(bridge, token, recipient, amount, domain);
             uint256 tokenFee = amount - bridgeAmount;
             if (tokenFee > maxTokenFee) revert TokenFeeExceedsMax(tokenFee, maxTokenFee);
 
-            prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
-
-            executeHypERC20CollateralBridge({bridge: bridge, recipient: recipient, amount: bridgeAmount, msgFee: msgFee, domain: domain});
-            ERC20(token).safeApprove({to: bridge, amount: 0});
+            // Native (HypNative) path: token == Constants.ETH. Forward the full native `amount`
+            // to transferRemote — it covers bridgeAmount + all fees. No ERC20 pull/approve.
+            if (token == Constants.ETH) {
+                executeHypBridge({bridge: bridge, recipient: recipient, amount: bridgeAmount, msgFee: amount, domain: domain});
+            } else {
+                prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
+                executeHypBridge({bridge: bridge, recipient: recipient, amount: bridgeAmount, msgFee: msgFee, domain: domain});
+                ERC20(token).safeApprove({to: bridge, amount: 0});
+            }
         } else {
             revert InvalidBridgeType({bridgeType: bridgeType});
         }
     }
 
-    /// @dev Executes bridge transfer via HypXERC20
-    function executeHypXERC20Bridge(
-        address bridge,
-        address sender,
-        address recipient,
-        uint256 amount,
-        uint256 msgFee,
-        uint32 domain
-    ) private {
-        bytes memory metadata = StandardHookMetadata.formatMetadata({
-            _msgValue: uint256(0),
-            _gasLimit: HypXERC20(bridge).destinationGas(domain),
-            _refundAddress: sender,
-            _customMetadata: ''
-        });
-
-        HypXERC20(bridge).transferRemote{value: msgFee}({
+    /// @dev Executes bridge transfer via ITokenBridge (HypXERC20 or HypERC20Collateral)
+    function executeHypBridge(address bridge, address recipient, uint256 amount, uint256 msgFee, uint32 domain)
+        private
+    {
+        ITokenBridge(bridge).transferRemote{value: msgFee}({
             _destination: domain,
             _recipient: TypeCasts.addressToBytes32(recipient),
-            _amountOrId: amount,
-            _hookMetadata: metadata,
-            _hook: address(HypXERC20(bridge).hook())
+            _amount: amount
         });
     }
 
@@ -130,26 +104,8 @@ abstract contract BridgeRouter is Permit2Payments {
         uint256 msgFee,
         uint32 domain
     ) private {
-        ITokenBridge(bridge).sendToken{value: msgFee}({
-            _recipient: recipient,
-            _amount: amount,
-            _domain: domain,
-            _refundAddress: sender
-        });
-    }
-
-    /// @dev Executes bridge transfer via HypERC20Collateral
-    function executeHypERC20CollateralBridge(
-        address bridge,
-        address recipient,
-        uint256 amount,
-        uint256 msgFee,
-        uint32 domain
-    ) private {
-        HypERC20Collateral(bridge).transferRemote{value: msgFee}({
-            _destination: domain,
-            _recipient: TypeCasts.addressToBytes32(recipient),
-            _amountOrId: amount
+        IXVeloTokenBridge(bridge).sendToken{value: msgFee}({
+            _recipient: recipient, _amount: amount, _domain: domain, _refundAddress: sender
         });
     }
 
@@ -170,7 +126,7 @@ abstract contract BridgeRouter is Permit2Payments {
         uint32 domain
     ) internal view returns (uint256 bridgeAmount) {
         bytes32 recipientBytes32 = TypeCasts.addressToBytes32(recipient);
-        Quote[] memory quotes = IHypTokenBridge(bridge).quoteTransferRemote(domain, recipientBytes32, amount);
+        Quote[] memory quotes = ITokenFee(bridge).quoteTransferRemote(domain, recipientBytes32, amount);
         uint256 igpTokenFee = (quotes[0].token == token) ? quotes[0].amount : 0;
         uint256 linearQuotedTokens = quotes[1].amount + quotes[2].amount;
         bridgeAmount = ((amount - igpTokenFee) * amount) / linearQuotedTokens;

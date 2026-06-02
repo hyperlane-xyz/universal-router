@@ -195,6 +195,26 @@ yarn test:gas
 
 Fill out parameters in `script/deployParameters/Deploy<network>.s.sol`
 
+For the supported chain list, the wrapper script performs a simulation first and only broadcasts when `--broadcast` is passed:
+
+```console
+./script/deploy.sh <network>
+./script/deploy.sh <network> --broadcast
+```
+
+To run every configured chain:
+
+```console
+./script/deployAll.sh
+./script/deployAll.sh --broadcast
+```
+
+After broadcasting, verify all deployed routers against local bytecode and deploy parameters:
+
+```console
+./script/verifyDeploy.sh --all
+```
+
 ```console
 forge script --broadcast \
 --rpc-url <RPC-URL> \

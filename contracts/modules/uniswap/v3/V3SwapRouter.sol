@@ -12,6 +12,7 @@ import {RouterImmutables} from '../RouterImmutables.sol';
 import {Permit2Payments} from '../../Permit2Payments.sol';
 
 import {MaxInputAmount} from '../../../libraries/MaxInputAmount.sol';
+import {Constants} from '../../../libraries/Constants.sol';
 import {BytesLib} from './BytesLib.sol';
 import {V3Path} from './V3Path.sol';
 
@@ -35,6 +36,15 @@ abstract contract V3SwapRouter is RouterImmutables, Permit2Payments, IUniswapV3S
     uint160 internal constant MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342;
 
     function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
+        _v3SwapCallback(amount0Delta, amount1Delta, data);
+    }
+
+    /// @dev PancakeSwap V3 pools call this selector instead of uniswapV3SwapCallback — logic is identical.
+    function pancakeV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
+        _v3SwapCallback(amount0Delta, amount1Delta, data);
+    }
+
+    function _v3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) private {
         if (amount0Delta <= 0 && amount1Delta <= 0) revert V3InvalidSwap(); // swaps entirely within 0-liquidity regions are not supported
         (, address payer, bool isUni) = abi.decode(data, (bytes, address, bool));
         bytes calldata path = data.toBytes(0);
@@ -163,13 +173,14 @@ abstract contract V3SwapRouter is RouterImmutables, Permit2Payments, IUniswapV3S
 
         zeroForOne = isExactIn ? tokenIn < tokenOut : tokenOut < tokenIn;
 
-        (amount0Delta, amount1Delta) = ICLPool(computePoolAddress(tokenIn, tokenOut, poolParam, isUni)).swap(
-            recipient,
-            zeroForOne,
-            amount,
-            (zeroForOne ? MIN_SQRT_RATIO + 1 : MAX_SQRT_RATIO - 1),
-            abi.encode(path, payer, isUni)
-        );
+        (amount0Delta, amount1Delta) = ICLPool(computePoolAddress(tokenIn, tokenOut, poolParam, isUni))
+            .swap(
+                recipient,
+                zeroForOne,
+                amount,
+                (zeroForOne ? MIN_SQRT_RATIO + 1 : MAX_SQRT_RATIO - 1),
+                abi.encode(path, payer, isUni)
+            );
     }
 
     /// @dev `poolParam` is `tickSpacing` in Slipstream pools and `fee` in UniV3 pools.
@@ -183,6 +194,18 @@ abstract contract V3SwapRouter is RouterImmutables, Permit2Payments, IUniswapV3S
         (address factory, bytes32 initCodeHash) = isUni
             ? (UNISWAP_V3_FACTORY, UNISWAP_V3_POOL_INIT_CODE_HASH)
             : (VELODROME_CL_FACTORY, VELODROME_CL_POOL_INIT_CODE_HASH);
+
+        uint24 factorySelector = poolParam & Constants.CL_FACTORY_SELECTOR_MASK;
+        if (factorySelector != 0) {
+            if (factorySelector == Constants.CL_FACTORY_2_FLAG) {
+                factory = VELODROME_CL_FACTORY_2;
+                initCodeHash = VELODROME_CL_POOL_INIT_CODE_HASH_2;
+            } else if (factorySelector == Constants.CL_FACTORY_3_FLAG) {
+                factory = VELODROME_CL_FACTORY_3;
+                initCodeHash = VELODROME_CL_POOL_INIT_CODE_HASH_3;
+            }
+            poolParam &= Constants.CL_POOL_PARAM_MASK;
+        }
 
         pool = address(
             uint160(
