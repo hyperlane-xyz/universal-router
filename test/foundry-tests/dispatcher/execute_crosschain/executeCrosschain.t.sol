@@ -101,6 +101,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             rootIcaRouter.routers(leafDomain), // destination ica router
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
+            bytes32(0), // recipient (zero for EVM→EVM ICA path)
             MESSAGE_FEE, // fee to dispatch x-chain message
             address(0), // token
             0, // tokenFee
@@ -236,6 +237,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             rootIcaRouter.routers(leafDomain), // destination ica router
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
+            bytes32(0), // recipient (zero for EVM→EVM ICA path)
             MESSAGE_FEE, // fee to dispatch x-chain message
             address(0), // token
             0, // tokenFee
@@ -385,6 +387,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             rootIcaRouter.routers(leafDomain), // destination ica router
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
+            bytes32(0), // recipient (zero for EVM→EVM ICA path)
             MESSAGE_FEE, // fee to dispatch x-chain message
             address(0), // token
             0, // tokenFee
@@ -524,6 +527,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             rootIcaRouter.routers(leafDomain), // destination ica router
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
+            bytes32(0), // recipient (zero for EVM→EVM ICA path)
             MESSAGE_FEE, // fee to dispatch x-chain message
             address(0), // token
             0, // tokenFee
@@ -659,6 +663,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             rootIcaRouter.routers(leafDomain), // destination ica router
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
+            bytes32(0), // recipient (zero for EVM→EVM ICA path)
             MESSAGE_FEE, // fee to dispatch x-chain message
             address(0), // token
             0, // tokenFee
@@ -808,6 +813,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             rootIcaRouter.routers(leafDomain), // destination ica router
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
+            bytes32(0), // recipient (zero for EVM→EVM ICA path)
             MESSAGE_FEE, // fee to dispatch x-chain message
             address(0), // token
             0, // tokenFee
@@ -949,6 +955,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             rootIcaRouter.routers(leafDomain), // destination ica router
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
+            bytes32(0), // recipient (zero for EVM→EVM ICA path)
             MESSAGE_FEE, // fee to dispatch x-chain message
             address(0), // token
             0, // tokenFee
@@ -1098,6 +1105,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             rootIcaRouter.routers(leafDomain), // destination ica router
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
+            bytes32(0), // recipient (zero for EVM→EVM ICA path)
             MESSAGE_FEE, // fee to dispatch x-chain message
             address(0), // token
             0, // tokenFee
@@ -1269,6 +1277,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             rootIcaRouter.routers(leafDomain), // destination ica router
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
+            bytes32(0), // recipient (zero for EVM→EVM ICA path)
             MESSAGE_FEE, // fee to dispatch x-chain message
             address(0), // token
             0, // tokenFee
@@ -1438,6 +1447,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             rootIcaRouter.routers(leafDomain), // destination ica router
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
+            bytes32(0), // recipient (zero for EVM→EVM ICA path)
             MESSAGE_FEE, // fee to dispatch x-chain message
             address(0), // token
             0, // tokenFee
@@ -1598,6 +1608,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             rootIcaRouter.routers(leafDomain), // destination ica router
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
+            bytes32(0), // recipient (zero for EVM→EVM ICA path)
             MESSAGE_FEE + leftoverETH, // fee to dispatch x-chain message
             address(0), // token
             0, // tokenFee
@@ -1731,6 +1742,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             rootIcaRouter.routers(leafDomain), // destination ica router
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
+            bytes32(0), // recipient (zero for EVM→EVM ICA path)
             MESSAGE_FEE, // fee to dispatch x-chain message
             address(0), // token
             0, // tokenFee
@@ -1983,6 +1995,7 @@ contract ExecuteCrossChainTest is BaseForkFixture {
             rootIcaRouter.routers(leafDomain), // destination ica router
             bytes32(0), // destination ism
             commitment, // commitment of the calls to be made
+            bytes32(0), // recipient (zero for EVM→EVM ICA path)
             _msgFee + _leftoverETH, // fee to dispatch x-chain message
             address(0), // token
             0, // tokenFee
