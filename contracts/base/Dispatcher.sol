@@ -382,12 +382,13 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         sender: msgSender(), recipient: recipient, token: token, amount: amount, domain: domain
                     });
                 } else if (command == Commands.EXECUTE_CROSS_CHAIN) {
-                    // equivalent: abi.decode(inputs, (uint32, address, bytes32, bytes32, bytes32, uint256, address, uint256, address, bytes))
+                    // equivalent: abi.decode(inputs, (uint32, address, bytes32, bytes32, bytes32, bytes32, uint256, address, uint256, address, bytes))
                     uint32 domain;
                     address icaRouter;
                     bytes32 remoteRouter;
                     bytes32 ism;
                     bytes32 commitment;
+                    bytes32 recipient;
                     uint256 msgFee;
                     address token;
                     uint256 tokenFee;
@@ -398,18 +399,27 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         remoteRouter := calldataload(add(inputs.offset, 0x40))
                         ism := calldataload(add(inputs.offset, 0x60))
                         commitment := calldataload(add(inputs.offset, 0x80))
-                        msgFee := calldataload(add(inputs.offset, 0xA0))
-                        token := calldataload(add(inputs.offset, 0xC0))
-                        tokenFee := calldataload(add(inputs.offset, 0xE0))
-                        hook := calldataload(add(inputs.offset, 0x100))
-                        // 0x120 offset contains the hook metadata, decoded below
+                        recipient := calldataload(add(inputs.offset, 0xA0))
+                        msgFee := calldataload(add(inputs.offset, 0xC0))
+                        token := calldataload(add(inputs.offset, 0xE0))
+                        tokenFee := calldataload(add(inputs.offset, 0x100))
+                        hook := calldataload(add(inputs.offset, 0x120))
+                        // 0x140 offset contains the hook metadata, decoded below
                     }
-                    bytes calldata hookMetadata = inputs.toBytes(9);
+                    bytes calldata hookMetadata = inputs.toBytes(10);
+                    bytes32 salt = TypeCasts.addressToBytes32(msgSender());
 
                     if (icaRouter == address(0)) {
                         // Direct Hyperlane mailbox dispatch — used for Sealevel destinations.
+                        // `token`     = warp route bridge (mailbox read from it via IMailboxClient).
+                        // `recipient` = user's Solana wallet pubkey (bytes32).
+                        // `ism`       = zero bytes32 (no ISM override; Solana UR uses its default ISM).
+                        // Message body (96 bytes): commitment || salt || recipient
+                        //   salt = TypeCasts.addressToBytes32(msgSender()) — derived on-chain.
+                        // Solana handle() decodes all three; the relayer extracts salt from
+                        // the body to pass as an instruction arg for PDA seed derivation.
                         IMailbox mailbox = IMailboxClient(token).mailbox();
-                        mailbox.dispatch{value: msgFee}(domain, remoteRouter, abi.encodePacked(commitment));
+                        mailbox.dispatch{value: msgFee}(domain, remoteRouter, abi.encodePacked(commitment, salt, recipient));
                     } else {
                         // ICA commit+reveal — used for EVM→EVM cross-chain swaps.
                         if (token != address(0)) ERC20(token).approve(icaRouter, tokenFee);
@@ -419,7 +429,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                             _ism: ism,
                             _hookMetadata: hookMetadata,
                             _hook: IPostDispatchHook(hook),
-                            _salt: TypeCasts.addressToBytes32(msgSender()),
+                            _salt: salt,
                             _commitment: commitment
                         });
                     }
