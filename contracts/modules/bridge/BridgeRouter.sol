@@ -26,7 +26,7 @@ abstract contract BridgeRouter is Permit2Payments {
     /// @notice Send tokens x-chain using the selected bridge
     /// @param bridgeType The type of bridge to use
     /// @param sender The address initiating the bridge
-    /// @param recipient The recipient address on the destination chain
+    /// @param recipient The recipient on the destination chain (bytes32 — EVM address left-padded or Solana pubkey)
     /// @param token The token to be bridged
     /// @param bridge The bridge used for the token
     /// @param amount The amount to bridge
@@ -37,7 +37,7 @@ abstract contract BridgeRouter is Permit2Payments {
     function bridgeToken(
         uint8 bridgeType,
         address sender,
-        address recipient,
+        bytes32 recipient,
         address token,
         address bridge,
         uint256 amount,
@@ -46,7 +46,7 @@ abstract contract BridgeRouter is Permit2Payments {
         uint32 domain,
         address payer
     ) internal {
-        if (recipient == address(0)) revert InvalidRecipient();
+        if (recipient == bytes32(0)) revert InvalidRecipient();
 
         if (bridgeType == BridgeTypes.HYP_XERC20) {
             prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
@@ -85,27 +85,30 @@ abstract contract BridgeRouter is Permit2Payments {
     }
 
     /// @dev Executes bridge transfer via ITokenBridge (HypXERC20 or HypERC20Collateral)
-    function executeHypBridge(address bridge, address recipient, uint256 amount, uint256 msgFee, uint32 domain)
+    function executeHypBridge(address bridge, bytes32 recipient, uint256 amount, uint256 msgFee, uint32 domain)
         private
     {
         ITokenBridge(bridge).transferRemote{value: msgFee}({
             _destination: domain,
-            _recipient: TypeCasts.addressToBytes32(recipient),
+            _recipient: recipient,
             _amount: amount
         });
     }
 
-    /// @dev Executes bridge transfer via XVELO TokenBridge
+    /// @dev Executes bridge transfer via XVELO TokenBridge (EVM-only; Solana not supported)
     function executeXVELOBridge(
         address bridge,
         address sender,
-        address recipient,
+        bytes32 recipient,
         uint256 amount,
         uint256 msgFee,
         uint32 domain
     ) private {
         IXVeloTokenBridge(bridge).sendToken{value: msgFee}({
-            _recipient: recipient, _amount: amount, _domain: domain, _refundAddress: sender
+            _recipient: TypeCasts.bytes32ToAddress(recipient),
+            _amount: amount,
+            _domain: domain,
+            _refundAddress: sender
         });
     }
 
@@ -114,19 +117,18 @@ abstract contract BridgeRouter is Permit2Payments {
     /// The IGP fee (quotes[0]) is fixed and deducted from available amount if token-denominated.
     /// @param bridge The HypERC20Collateral bridge address
     /// @param token The collateral token address
-    /// @param recipient The recipient address on the destination chain
+    /// @param recipient The recipient on the destination chain (bytes32)
     /// @param amount The total token amount the user provides
     /// @param domain The destination domain
     /// @return bridgeAmount The amount to pass to transferRemote
     function quoteExactInputBridgeAmount(
         address bridge,
         address token,
-        address recipient,
+        bytes32 recipient,
         uint256 amount,
         uint32 domain
     ) internal view returns (uint256 bridgeAmount) {
-        bytes32 recipientBytes32 = TypeCasts.addressToBytes32(recipient);
-        Quote[] memory quotes = ITokenFee(bridge).quoteTransferRemote(domain, recipientBytes32, amount);
+        Quote[] memory quotes = ITokenFee(bridge).quoteTransferRemote(domain, recipient, amount);
         uint256 igpTokenFee = (quotes[0].token == token) ? quotes[0].amount : 0;
         uint256 linearQuotedTokens = quotes[1].amount + quotes[2].amount;
         bridgeAmount = ((amount - igpTokenFee) * amount) / linearQuotedTokens;

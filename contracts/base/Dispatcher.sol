@@ -11,6 +11,8 @@ import {PoolKey} from '@uniswap/v4-core/src/types/PoolKey.sol';
 import {IPoolManager} from '@uniswap/v4-core/src/interfaces/IPoolManager.sol';
 
 import {IInterchainAccountRouter} from '../interfaces/external/IInterchainAccountRouter.sol';
+import {IMailboxClient} from '../interfaces/external/IMailboxClient.sol';
+import {IMailbox} from '@hyperlane/core/contracts/interfaces/IMailbox.sol';
 import {V2SwapRouter} from '../modules/uniswap/v2/V2SwapRouter.sol';
 import {V3SwapRouter} from '../modules/uniswap/v3/V3SwapRouter.sol';
 import {V4SwapRouter} from '../modules/uniswap/v4/V4SwapRouter.sol';
@@ -32,7 +34,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
 
     event UniversalRouterSwap(address indexed sender, address indexed recipient);
     event UniversalRouterBridge(
-        address indexed sender, address indexed recipient, address indexed token, uint256 amount, uint32 domain
+        address indexed sender, bytes32 indexed recipient, address indexed token, uint256 amount, uint32 domain
     );
 
     event CrossChainSwap(
@@ -329,9 +331,9 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                     (success, output) =
                         address(poolManager).call(abi.encodeCall(IPoolManager.initialize, (poolKey, sqrtPriceX96)));
                 } else if (command == Commands.BRIDGE_TOKEN) {
-                    // equivalent: abi.decode(inputs, (uint8, address, address, address, uint256, uint256, uint256, uint32, bool))
+                    // equivalent: abi.decode(inputs, (uint8, bytes32, address, address, uint256, uint256, uint256, uint32, bool))
                     uint8 bridgeType;
-                    address recipient;
+                    bytes32 recipient;
                     address token;
                     address bridge;
                     uint256 amount;
@@ -356,7 +358,9 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                             payerIsUser := calldataload(add(inputs.offset, 0x100))
                         }
                         payer = payerIsUser ? sender : address(this);
-                        recipient = recipient == ActionConstants.MSG_SENDER ? sender : recipient;
+                        if (recipient == bytes32(uint256(uint160(ActionConstants.MSG_SENDER)))) {
+                            recipient = TypeCasts.addressToBytes32(sender);
+                        }
                     }
                     if (amount == ActionConstants.CONTRACT_BALANCE) {
                         amount =
@@ -402,16 +406,23 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                     }
                     bytes calldata hookMetadata = inputs.toBytes(9);
 
-                    if (token != address(0)) ERC20(token).approve(icaRouter, tokenFee);
-                    IInterchainAccountRouter(icaRouter).callRemoteCommitReveal{value: msgFee}({
-                        _destination: domain,
-                        _router: remoteRouter,
-                        _ism: ism,
-                        _hookMetadata: hookMetadata,
-                        _hook: IPostDispatchHook(hook),
-                        _salt: TypeCasts.addressToBytes32(msgSender()),
-                        _commitment: commitment
-                    });
+                    if (icaRouter == address(0)) {
+                        // Direct Hyperlane mailbox dispatch — used for Sealevel destinations.
+                        IMailbox mailbox = IMailboxClient(token).mailbox();
+                        mailbox.dispatch{value: msgFee}(domain, remoteRouter, abi.encodePacked(commitment));
+                    } else {
+                        // ICA commit+reveal — used for EVM→EVM cross-chain swaps.
+                        if (token != address(0)) ERC20(token).approve(icaRouter, tokenFee);
+                        IInterchainAccountRouter(icaRouter).callRemoteCommitReveal{value: msgFee}({
+                            _destination: domain,
+                            _router: remoteRouter,
+                            _ism: ism,
+                            _hookMetadata: hookMetadata,
+                            _hook: IPostDispatchHook(hook),
+                            _salt: TypeCasts.addressToBytes32(msgSender()),
+                            _commitment: commitment
+                        });
+                    }
                     emit CrossChainSwap({
                         caller: msgSender(), localRouter: icaRouter, destinationDomain: domain, commitment: commitment
                     });
