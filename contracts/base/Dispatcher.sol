@@ -414,10 +414,8 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         // `token`     = warp route bridge (mailbox read from it via IMailboxClient).
                         // `recipient` = user's Solana wallet pubkey (bytes32).
                         // `ism`       = zero bytes32 (no ISM override; Solana UR uses its default ISM).
-                        // Message body (96 bytes): commitment || salt || recipient
-                        //   salt = TypeCasts.addressToBytes32(msgSender()) — derived on-chain.
-                        // Solana handle() decodes all three; the relayer extracts salt from
-                        // the body to pass as an instruction arg for PDA seed derivation.
+                        // Message body (96 bytes): commitment || userSalt || recipient
+                        // userSalt = TypeCasts.addressToBytes32(msgSender()) — mirrors ICA userSalt for PDA derivation.
                         IMailbox mailbox = IMailboxClient(token).mailbox();
                         mailbox.dispatch{value: msgFee}(domain, remoteRouter, abi.encodePacked(commitment, salt, recipient));
                     } else {

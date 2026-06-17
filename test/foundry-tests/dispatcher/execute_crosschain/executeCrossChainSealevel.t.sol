@@ -19,7 +19,7 @@ import {MockSealevelBridge} from '../../mock/MockSealevelBridge.sol';
 //
 // Tests the full Dispatcher path for icaRouter == address(0):
 //   router.execute() → Dispatcher reads mailbox() from bridge →
-//   mailbox.dispatch(solanaDomain, remoteRouter, commitment||salt||recipient)
+//   mailbox.dispatch(solanaDomain, remoteRouter, commitment||userSalt||recipient)
 //
 // The reveal payload (REVEAL_PAYLOAD) and shared constants are mirrored in
 // tests/universal_router.ts so both sides can independently compute the same
@@ -55,7 +55,7 @@ contract ExecuteCrossChainSealevelTest is Test {
     //   08 00 00 00   → len(inputs[0]) = 8
     //   40 42 0f 00 00 00 00 00 → u64-LE(1_000_000)
     //
-    // handle_reveal() on Solana deserializes this exact byte string and re-computes
+    // RouterInstruction::Reveal on Solana deserializes this exact byte string and re-computes
     // keccak256(REVEAL_PAYLOAD || salt) to verify the stored commitment.
     bytes constant REVEAL_PAYLOAD = hex'010000000b010000000800000040420f0000000000';
 
@@ -98,21 +98,26 @@ contract ExecuteCrossChainSealevelTest is Test {
     // test_sealevel_commitmentMessageBody
     //
     // Verifies the 96-byte message body dispatched to the Solana mailbox:
-    //   [0..32]  commitment = keccak256(REVEAL_PAYLOAD || salt)
-    //   [32..64] salt       = TypeCasts.addressToBytes32(USER)
+    //   [0..32]  commitment = keccak256(REVEAL_PAYLOAD || revealSalt)
+    //   [32..64] userSalt   = TypeCasts.addressToBytes32(msgSender()) — mirrors ICA userSalt
     //   [64..96] recipient  = ALICE_SOLANA_PUBKEY
     //
     // On success, logs all values so they can be pasted into the Anchor test
-    // and used to drive handle() + handle_reveal() with matching inputs.
+    // and used to drive RouterInstruction::Reveal with matching inputs.
     // -----------------------------------------------------------------------
     function test_sealevel_commitmentMessageBody() public {
-        // salt — computed on-chain by Dispatcher from msgSender()
-        bytes32 salt = TypeCasts.addressToBytes32(USER);
+        // userSalt — on-chain Dispatcher computes TypeCasts.addressToBytes32(msgSender()),
+        // used as PDA seed on Solana (mirrors ICA userSalt derivation).
+        bytes32 userSalt = TypeCasts.addressToBytes32(USER);
 
-        // commitment = keccak256(REVEAL_PAYLOAD || salt)
-        // Mirrors handle_reveal()'s verification:
+        // revealSalt — random bytes32 used for the commitment hash (computed off-chain).
+        // In production the engine generates this with crypto.getRandomValues().
+        bytes32 revealSalt = bytes32(hex'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef');
+
+        // commitment = keccak256(REVEAL_PAYLOAD || revealSalt)
+        // Mirrors RouterInstruction::Reveal's verification:
         //   keccak256(borsh_serialize(swap_commands, swap_inputs) || pending.salt)
-        bytes32 commitment = keccak256(bytes.concat(REVEAL_PAYLOAD, abi.encodePacked(salt)));
+        bytes32 commitment = keccak256(bytes.concat(REVEAL_PAYLOAD, abi.encodePacked(revealSalt)));
 
         // Solana PDA that receives bridged tokens (derived off-chain by engine)
         bytes32 pdaBytes32 =
@@ -165,29 +170,32 @@ contract ExecuteCrossChainSealevelTest is Test {
         bytes memory body = recordingMailbox.lastBody();
         assertEq(body.length, 96, 'body must be exactly 96 bytes');
 
+        // body layout: [0..32] = commitment, [32..64] = userSalt, [64..96] = recipient
         bytes32 gotCommitment;
-        bytes32 gotSalt;
+        bytes32 gotUserSalt;
         bytes32 gotRecipient;
         assembly {
-            gotCommitment := mload(add(body, 0x20))
-            gotSalt := mload(add(body, 0x40))
-            gotRecipient := mload(add(body, 0x60))
+            gotCommitment := mload(add(body, 0x20)) // bytes[0..31]
+            gotUserSalt   := mload(add(body, 0x40)) // bytes[32..63]
+            gotRecipient  := mload(add(body, 0x60)) // bytes[64..95]
         }
         assertEq(gotCommitment, commitment, 'commitment field mismatch');
-        assertEq(gotSalt, salt, 'salt field must be TypeCasts.addressToBytes32(USER)');
+        assertEq(gotUserSalt, TypeCasts.addressToBytes32(USER), 'userSalt must be TypeCasts.addressToBytes32(USER)');
         assertEq(gotRecipient, ALICE_SOLANA_PUBKEY, 'recipient field mismatch');
 
         // ── Cross-chain reference values (mirror in Anchor test) ────────────
         console.log('=== EVM->Solana message values (use in Anchor test) ===');
         console.log('REVEAL_PAYLOAD (hex):');
         console.logBytes(REVEAL_PAYLOAD);
-        console.log('salt (TypeCasts.addressToBytes32(USER)):');
-        console.logBytes32(salt);
-        console.log('commitment (keccak256(REVEAL_PAYLOAD || salt)):');
+        console.log('revealSalt (random, for commitment hash):');
+        console.logBytes32(revealSalt);
+        console.log('commitment (keccak256(REVEAL_PAYLOAD || revealSalt)):');
         console.logBytes32(commitment);
         console.log('ALICE_SOLANA_PUBKEY:');
         console.logBytes32(ALICE_SOLANA_PUBKEY);
-        console.log('full message body (96 bytes):');
+        console.log('userSalt (TypeCasts.addressToBytes32(USER)) at bytes[32..64]:');
+        console.logBytes32(userSalt);
+        console.log('full message body (96 bytes) — commitment || userSalt || recipient:');
         console.logBytes(body);
     }
 
