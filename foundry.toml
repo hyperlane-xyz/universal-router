@@ -40,6 +40,7 @@ yul = true
 # `monorepo/solidity/foundry.toml`'s [profile.tron].
 [profile.tron]
 src = 'contracts'
+test = 'test/tron'
 out = 'out-tron'
 cache_path = 'forge-cache-tron'
 libs = ['lib']
@@ -52,14 +53,14 @@ auto_detect_remappings = false
 # test/tron/fork/* is a stub for live-RPC fork tests — not runnable until a
 # Tron RPC with historical-state support is configured (TronGrid only allows
 # block tag "latest"; Ankr's tron_jsonrpc requires an API key).
-no-match-path = "{test/fork/*,test/tron/fork/*}"
+no-match-path = "{test/fork/*,test/tron/fork/*,test/foundry-tests/**}"
 remappings = [
   # Tron 0x41 prefix — contextual remap so the Create2 imports from V3SwapRouter and any
   # tron-specific tests resolve to the hyperlane-xyz/core override, while the broader
   # `@openzeppelin/contracts/=lib/...` below still serves transitive OZ imports from the
   # v4-periphery submodule. Add new contextual prefixes here as needed.
-  "contracts/modules/uniswap/v3/V3SwapRouter.sol:@openzeppelin/contracts/utils/Create2.sol=node_modules/@hyperlane-xyz/core/overrides/tron/Create2.sol",
-  "test/tron/:@openzeppelin/contracts/utils/Create2.sol=node_modules/@hyperlane-xyz/core/overrides/tron/Create2.sol",
+  "contracts/modules/uniswap/v3/V3SwapRouter.sol:@openzeppelin/contracts/utils/Create2.sol=contracts/overrides/tron/Create2.sol",
+  "test/tron/:@openzeppelin/contracts/utils/Create2.sol=contracts/overrides/tron/Create2.sol",
   "@openzeppelin/contracts/=lib/uniswap-v4-periphery/lib/uniswap-v4-core/lib/openzeppelin-contracts/contracts/",
   "@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/",
   "node_modules/@hyperlane-xyz/:@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable-v4/",

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {DeployUniversalRouter} from '../DeployUniversalRouter.s.sol';
+import {RouterDeployParameters} from 'contracts/types/RouterDeployParameters.sol';
 
 /// @title Tron mainnet deployment for UniversalRouter targeting SunSwap V3.
 ///
@@ -11,8 +12,8 @@ import {DeployUniversalRouter} from '../DeployUniversalRouter.s.sol';
 /// that the out-of-band Tron deployer (TronWeb / equivalent) consumes.
 ///
 /// MUST be invoked under the `tron` foundry profile so that `V3SwapRouter`
-/// resolves OZ's `Create2` to the `0x41`-prefix variant shipped by
-/// `hyperlane-xyz/core/overrides/tron/Create2.sol`. Without that profile,
+/// resolves OZ's `Create2` to the `0x41`-prefix variant at
+/// `contracts/overrides/tron/Create2.sol`. Without that profile,
 /// `computePoolAddress` produces EVM-style addresses and rejects every
 /// SunSwap pool callback. Build with:
 ///
@@ -51,14 +52,14 @@ import {DeployUniversalRouter} from '../DeployUniversalRouter.s.sol';
 ///    /libraries/PoolAddress.sol` matches all three pool addresses when used
 ///    with the `0x41` prefix. See `poolInitCodeHash` below.
 ///
-/// 4. **Permit2 is not deployed on Tron.** The base script's default at
-///    `0x494bbD8A3302AcA833D307D11838f18DbAdA9C25` does not exist on Tron.
-///    The out-of-band deployer must deploy Permit2 first and pass its
-///    address into `RouterDeployParameters.permit2`.
+/// 4. **Permit2 and UnsupportedProtocol.** RESOLVED. Both are pre-deployed on
+///    Tron mainnet and hardcoded below (see `permit2` and `unsupported` overrides
+///    in `setUp()`). The base script's CreateX-based deployment path is bypassed
+///    via the `run()` override — no CreateX required.
 ///
 /// 5. **TVM CREATE2 prefix.** RESOLVED — see the [profile.tron] foundry
 ///    profile, which contextually remaps OZ's `Create2.sol` (imported by
-///    `V3SwapRouter`) to `hyperlane-xyz/core`'s 0x41 override. `forge inspect`
+///    `V3SwapRouter`) to `contracts/overrides/tron/Create2.sol`. `forge inspect`
 ///    confirms the substituted bytecode differs from the default profile.
 ///
 /// 6. **Deployer must be funded.** The deployer EOA
@@ -68,7 +69,15 @@ import {DeployUniversalRouter} from '../DeployUniversalRouter.s.sol';
 contract DeployTron is DeployUniversalRouter {
     error DeployTron_NotReadyToDeploy();
 
+    // Pre-deployed on Tron mainnet — hardcoded instead of using the CreateX path
+    // in the base run() (CreateX is not deployed on Tron).
+    address constant TRON_PERMIT2 = 0x7CD82628f138187BbCa0b8A075cDcd4D99fc7A52;
+    address constant TRON_UNSUPPORTED = 0x7e1AD7cCDd670b7A44083945bf4c2D7f8b5CF3B8;
+
     function setUp() public virtual override {
+        permit2 = TRON_PERMIT2;
+        unsupported = TRON_UNSUPPORTED;
+
         params = DeploymentParameters({
             // WTRX (`TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR`)
             weth9: 0x891cdb91d149f23B1a45D9c5Ca78a88d0cB44C18,
@@ -95,6 +104,39 @@ contract DeployTron is DeployUniversalRouter {
         });
 
         outputFilename = 'tron.json';
+    }
+
+    /// @dev Bypasses the base run() which assumes CreateX is available. Permit2
+    /// and UnsupportedProtocol are already deployed; we just build routerParams
+    /// and call deploy() (which still reverts — out-of-band TronWeb deployment
+    /// required, see item 1 in the contract NatSpec).
+    function run() external override {
+        vm.startBroadcast(deployer);
+
+        routerParams = RouterDeployParameters({
+            permit2: permit2,
+            weth9: mapUnsupported(params.weth9),
+            v2Factory: mapUnsupported(params.v2Factory),
+            v3Factory: mapUnsupported(params.v3Factory),
+            pairInitCodeHash: params.pairInitCodeHash,
+            poolInitCodeHash: params.poolInitCodeHash,
+            v4PoolManager: mapUnsupported(params.v4PoolManager),
+            veloV2Factory: mapUnsupported(params.veloV2Factory),
+            veloCLFactory: mapUnsupported(params.veloCLFactory),
+            veloV2InitCodeHash: params.veloV2InitCodeHash,
+            veloCLInitCodeHash: params.veloCLInitCodeHash,
+            veloCLFactory2: mapUnsupported(params.veloCLFactory2),
+            veloCLInitCodeHash2: params.veloCLInitCodeHash2,
+            veloCLFactory3: mapUnsupported(params.veloCLFactory3),
+            veloCLInitCodeHash3: params.veloCLInitCodeHash3
+        });
+
+        deploy();
+
+        logParams();
+        logOutput();
+
+        vm.stopBroadcast();
     }
 
     /// @dev Forge script broadcast is not viable on Tron — see item 1 in the
