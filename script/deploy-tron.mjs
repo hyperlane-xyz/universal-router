@@ -19,11 +19,11 @@
 //   3. Deployer EOA funded with TRX (energy + bandwidth).
 //
 // Env vars:
-//   TRON_RPC_URL   JSON-RPC URL with /jsonrpc suffix (e.g. Chainstack endpoint).
-//                  TronGrid public works too: https://api.trongrid.io/jsonrpc.
-//                  Custom auth headers via ?custom_rpc_header=Header-Name:value.
-//   PRIVATE_KEY    Deployer private key (hex, 0x-prefixed). Pipe via 1Password:
-//                    PK=$(op read "op://abacusworks/<deployer>/private_key")
+//   TRON_RPC_URL      JSON-RPC URL with /jsonrpc suffix (e.g. Chainstack endpoint).
+//                     TronGrid public works too: https://api.trongrid.io/jsonrpc.
+//                     Custom auth headers via ?custom_rpc_header=Header-Name:value.
+//   TRON_PRIVATE_KEY  Deployer private key (hex, 0x-prefixed). Pipe via 1Password:
+//                       PK=$(op read "op://abacusworks/<deployer>/private_key")
 //
 // Usage:
 //   TRON_RPC_URL=... PRIVATE_KEY=... yarn deploy:tron
@@ -41,9 +41,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..');
 
 const TRON_RPC_URL = process.env.TRON_RPC_URL;
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const PRIVATE_KEY = process.env.TRON_PRIVATE_KEY;
 if (!TRON_RPC_URL) throw new Error('TRON_RPC_URL is required (e.g. https://.../jsonrpc)');
-if (!PRIVATE_KEY) throw new Error('PRIVATE_KEY is required');
+if (!PRIVATE_KEY) throw new Error('TRON_PRIVATE_KEY is required');
 
 // Mirrors script/deployParameters/DeployTron.s.sol::setUp(). Keep in sync.
 const ZERO_BYTES32 = '0x' + '00'.repeat(32);
@@ -87,15 +87,15 @@ function saveAddresses(addresses) {
 // an attached contract instance instead of broadcasting again. Persists the
 // new address immediately so a mid-sequence failure is recoverable.
 async function deploy(name, wallet, contractName, args = []) {
-  const artifact = loadArtifact(contractName);
-  const ethersFactory = new ContractFactory(artifact.abi, artifact.bytecode.object, wallet);
-  const factory = new TronContractFactory(ethersFactory, wallet);
-
   const addresses = loadAddresses();
   if (addresses[name]) {
     console.log(`${name}: ${addresses[name]} (already deployed, skipping)`);
-    return ethersFactory.attach(addresses[name]);
+    return { address: addresses[name] };
   }
+
+  const artifact = loadArtifact(contractName);
+  const ethersFactory = new ContractFactory(artifact.abi, artifact.bytecode.object, wallet);
+  const factory = new TronContractFactory(ethersFactory, wallet);
 
   const deployTx = factory.getDeployTransaction(...args);
   const estimatedGas = await wallet.estimateGas(deployTx);
