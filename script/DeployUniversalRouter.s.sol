@@ -57,7 +57,7 @@ abstract contract DeployUniversalRouter is Script, Constants {
     // set values for params and unsupported
     function setUp() public virtual;
 
-    function run() external {
+    function run() external virtual {
         unsupported = UNSUPPORTED_PROTOCOL_ENTROPY.computeCreate3Address({_deployer: deployer});
         vm.startBroadcast(deployer);
 

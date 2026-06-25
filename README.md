@@ -235,6 +235,81 @@ script/deployParameters/Deploy<network>.s.sol:Deploy<network> \
 --verify
 ```
 
+### Deploying to Tron
+
+Tron (TVM) requires a different deployment flow because:
+- `forge script --broadcast` is not viable on Tron — Tron uses `ref_block_hash`/`ref_block_bytes` for replay protection instead of nonces, so JSON-RPC adapters (TronGrid, Chainstack) do not expose `eth_getTransactionCount` or `eth_feeHistory`.
+- CreateX is not deployed on Tron mainnet, so addresses are not cross-chain deterministic.
+- The TVM `CREATE2` prefix is `0x41` instead of EVM's `0xff` — pool address computation must use the override at `contracts/overrides/tron/Create2.sol`.
+
+#### 1. Build under the Tron profile
+
+Always build with `FOUNDRY_PROFILE=tron` so `V3SwapRouter.computePoolAddress` resolves to the `0x41`-prefix `Create2`:
+
+```console
+FOUNDRY_PROFILE=tron forge build
+```
+
+The compiled artifacts land in `out-tron/`. Verify the substitution took effect:
+
+```console
+# The bytecode hash must differ from the default profile output
+FOUNDRY_PROFILE=tron forge inspect UniversalRouter bytecode | sha256sum
+forge inspect UniversalRouter bytecode | sha256sum
+```
+
+Run the SunSwap V3 pool address unit tests to confirm the override is working:
+
+```console
+FOUNDRY_PROFILE=tron forge test --match-path "test/tron/SunSwapPoolAddress.t.sol" -v
+```
+
+#### 2. Prerequisites (already done — for reference)
+
+Permit2 and UnsupportedProtocol are pre-deployed on Tron mainnet and hardcoded in `DeployTron.s.sol`:
+
+| Contract | Tron address |
+|---|---|
+| Permit2 | `0x7CD82628f138187BbCa0b8A075cDcd4D99fc7A52` |
+| UnsupportedProtocol | `0x7e1AD7cCDd670b7A44083945bf4c2D7f8b5CF3B8` |
+
+If redeploying from scratch, use `deploy-tron.mjs` to send a `CreateSmartContract` transaction directly via the TronGrid REST API.
+
+#### 3. Deploy the UniversalRouter via TronWeb
+
+Because forge cannot broadcast to Tron, deployment is driven by the Node.js script `script/deploy-tron.mjs`, which reads the compiled bytecode from `out-tron/` and submits Tron-native transactions.
+
+The script takes two env vars:
+
+| Var | Description |
+|---|---|
+| `TRON_RPC_URL` | A Tron JSON-RPC endpoint. TronGrid (`https://api.trongrid.io/jsonrpc`), Alchemy (`https://tron-mainnet.g.alchemy.com/v2/<key>`), or Nile testnet (`https://nile.trongrid.io/jsonrpc`). |
+| `TRON_PRIVATE_KEY` | Deployer private key, hex with `0x` prefix. |
+
+> **Note:** For non-TronGrid/non-localhost URLs (e.g. Alchemy), the script uses that URL for JSON-RPC queries (ethers) but falls back to public TronGrid for TronWeb REST calls (`/wallet/*`). Both paths work for deployment.
+
+```console
+FOUNDRY_PROFILE=tron forge build          # ensure out-tron/ is up to date
+
+TRON_RPC_URL=https://tron-mainnet.g.alchemy.com/v2/<key> \
+TRON_PRIVATE_KEY=0x<deployer-key> \
+yarn deploy:tron
+```
+
+The script is idempotent — if an address is already recorded in `deployment-addresses/tron.json` it skips that contract. The deployed `UniversalRouter` address is written to that file automatically.
+
+To test against Tron's public testnet before spending mainnet TRX, use the Nile testnet and fund your deployer from the faucet at [nileex.io](https://nileex.io):
+
+```console
+TRON_RPC_URL=https://nile.trongrid.io/jsonrpc \
+TRON_PRIVATE_KEY=0x<deployer-key> \
+yarn deploy:tron
+```
+
+#### 4. Verify pool address computation (post-deploy)
+
+After deployment, confirm the router resolves SunSwap V3 pools correctly by calling `quoteExactInput` against a known USDT/WTRX pool and comparing to the live pool addresses in `test/tron/SunSwapPoolAddress.t.sol`.
+
 #### To Deploy Permit2 Alongside UniversalRouter
 
 Fill out parameters in `scripts/deployParameters/<network>.json`
