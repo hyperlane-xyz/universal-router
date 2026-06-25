@@ -195,7 +195,7 @@ contract ExecuteCrossChainSealevelTest is Test {
         console.logBytes32(ALICE_SOLANA_PUBKEY);
         console.log('userSalt (TypeCasts.addressToBytes32(USER)) at bytes[32..64]:');
         console.logBytes32(userSalt);
-        console.log('full message body (96 bytes) — commitment || userSalt || recipient:');
+        console.log('full message body (96 bytes) - commitment || userSalt || recipient:');
         console.logBytes(body);
     }
 
