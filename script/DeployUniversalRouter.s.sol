@@ -52,6 +52,7 @@ abstract contract DeployUniversalRouter is Script, Constants {
 
     bool public isTest = false;
     string public outputFilename = '';
+    bytes11 public routerEntropy = UNIVERSAL_ROUTER_ENTROPY_TEST_V1;
 
     // set values for params and unsupported
     function setUp() public virtual;
@@ -98,12 +99,12 @@ abstract contract DeployUniversalRouter is Script, Constants {
     }
 
     function deploy() internal virtual {
-        address computedRouter = UNIVERSAL_ROUTER_ENTROPY_V7.computeCreate3Address({_deployer: deployer});
+        address computedRouter = routerEntropy.computeCreate3Address({_deployer: deployer});
 
         if (computedRouter.code.length == 0) {
             router = UniversalRouter(
                 payable(cx.deployCreate3({
-                        salt: UNIVERSAL_ROUTER_ENTROPY_V7.calculateSalt({_deployer: deployer}),
+                        salt: routerEntropy.calculateSalt({_deployer: deployer}),
                         initCode: abi.encodePacked(type(UniversalRouter).creationCode, abi.encode(routerParams))
                     }))
             );
@@ -112,7 +113,7 @@ abstract contract DeployUniversalRouter is Script, Constants {
             console.log('Universal Router already deployed:', address(router));
         }
 
-        checkAddress({_entropy: UNIVERSAL_ROUTER_ENTROPY_V7, _output: address(router)});
+        checkAddress({_entropy: routerEntropy, _output: address(router)});
     }
 
     function logParams() internal view {

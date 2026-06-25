@@ -14,7 +14,7 @@ contract BridgeRouterHarness is BridgeRouter {
     function exposed_quoteExactInputBridgeAmount(
         address bridge,
         address token,
-        address recipient,
+        bytes32 recipient,
         uint256 amount,
         uint32 domain
     ) external view returns (uint256) {
@@ -29,7 +29,7 @@ contract QuoteExactInputTest is Test {
 
     address constant BRIDGE = address(0xB1);
     address constant TOKEN = address(0xC1);
-    address constant RECIPIENT = address(0xA1);
+    bytes32 constant RECIPIENT = bytes32(uint256(uint160(address(0xA1))));
     uint32 constant DOMAIN = 8453;
 
     function setUp() public {
@@ -43,10 +43,9 @@ contract QuoteExactInputTest is Test {
         quotesArr[1] = quotes[1];
         quotesArr[2] = quotes[2];
 
-        bytes32 recipientBytes32 = TypeCasts.addressToBytes32(RECIPIENT);
         vm.mockCall(
             BRIDGE,
-            abi.encodeCall(ITokenFee.quoteTransferRemote, (DOMAIN, recipientBytes32, amount)),
+            abi.encodeCall(ITokenFee.quoteTransferRemote, (DOMAIN, RECIPIENT, amount)),
             abi.encode(quotesArr)
         );
     }

@@ -18,6 +18,8 @@ abstract contract Constants {
     bytes11 public constant UNIVERSAL_ROUTER_ENTROPY_V5 = 0x0002000000000000000060;
     bytes11 public constant UNIVERSAL_ROUTER_ENTROPY_V6 = 0x0002000000000000000061;
     bytes11 public constant UNIVERSAL_ROUTER_ENTROPY_V7 = 0x0003000000000000000060;
+    // 0xff version byte keeps test deployments out of the production sequence
+    bytes11 public constant UNIVERSAL_ROUTER_ENTROPY_TEST_V1 = 0x00ff000000000000000060;
 
     bytes11 public constant PERMIT2_ENTROPY = 0x0000000000000000000069;
     bytes11 public constant UNSUPPORTED_PROTOCOL_ENTROPY = 0x0000000000000000000070;

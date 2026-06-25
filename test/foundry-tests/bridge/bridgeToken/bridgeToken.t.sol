@@ -404,7 +404,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
 
         vm.expectEmit(address(router));
         emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtInitialBal, leafDomain
+            users.alice, TypeCasts.addressToBytes32(users.alice), OPEN_USDT_ADDRESS, openUsdtInitialBal, leafDomain
         );
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
@@ -435,7 +435,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
 
         vm.expectEmit(address(router));
         emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtBridgeAmount, leafDomain
+            users.alice, TypeCasts.addressToBytes32(users.alice), OPEN_USDT_ADDRESS, openUsdtBridgeAmount, leafDomain
         );
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
@@ -555,7 +555,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
 
         vm.expectEmit(address(router));
         emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtInitialBal, leafDomain
+            users.alice, TypeCasts.addressToBytes32(users.alice), OPEN_USDT_ADDRESS, openUsdtInitialBal, leafDomain
         );
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
@@ -586,7 +586,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
 
         vm.expectEmit(address(router));
         emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtBridgeAmount, leafDomain
+            users.alice, TypeCasts.addressToBytes32(users.alice), OPEN_USDT_ADDRESS, openUsdtBridgeAmount, leafDomain
         );
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
@@ -810,7 +810,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
         uint256 balanceBefore = address(users.alice).balance;
 
         vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, VELO_ADDRESS, xVeloInitialBal, leafDomain_2);
+        emit Dispatcher.UniversalRouterBridge(users.alice, TypeCasts.addressToBytes32(users.alice), VELO_ADDRESS, xVeloInitialBal, leafDomain_2);
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
         uint256 balanceAfter = address(users.alice).balance;
@@ -842,7 +842,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
         uint256 balanceBefore = address(users.alice).balance;
 
         vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, VELO_ADDRESS, xVeloBridgeAmount, leafDomain_2);
+        emit Dispatcher.UniversalRouterBridge(users.alice, TypeCasts.addressToBytes32(users.alice), VELO_ADDRESS, xVeloBridgeAmount, leafDomain_2);
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
         uint256 balanceAfter = address(users.alice).balance;
@@ -979,7 +979,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
         uint256 balanceBefore = address(users.alice).balance;
 
         vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, VELO_ADDRESS, xVeloInitialBal, leafDomain_2);
+        emit Dispatcher.UniversalRouterBridge(users.alice, TypeCasts.addressToBytes32(users.alice), VELO_ADDRESS, xVeloInitialBal, leafDomain_2);
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
         uint256 balanceAfter = address(users.alice).balance;
@@ -1010,7 +1010,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
         uint256 balanceBefore = address(users.alice).balance;
 
         vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, VELO_ADDRESS, xVeloBridgeAmount, leafDomain_2);
+        emit Dispatcher.UniversalRouterBridge(users.alice, TypeCasts.addressToBytes32(users.alice), VELO_ADDRESS, xVeloBridgeAmount, leafDomain_2);
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
         uint256 balanceAfter = address(users.alice).balance;
@@ -1137,7 +1137,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
         uint256 balanceBefore = address(users.alice).balance;
 
         vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, XVELO_ADDRESS, xVeloBridgeAmount, rootDomain);
+        emit Dispatcher.UniversalRouterBridge(users.alice, TypeCasts.addressToBytes32(users.alice), XVELO_ADDRESS, xVeloBridgeAmount, rootDomain);
         leafRouter_2.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
         uint256 balanceAfter = address(users.alice).balance;
@@ -1196,7 +1196,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
         uint256 balanceBefore = address(users.alice).balance;
 
         vm.expectEmit(address(leafRouter_2));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, XVELO_ADDRESS, xVeloBridgeAmount, rootDomain);
+        emit Dispatcher.UniversalRouterBridge(users.alice, TypeCasts.addressToBytes32(users.alice), XVELO_ADDRESS, xVeloBridgeAmount, rootDomain);
         leafRouter_2.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
         uint256 balanceAfter = address(users.alice).balance;
@@ -1235,7 +1235,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
         emit ERC20.Transfer(users.alice, address(router), openUsdtBridgeAmount);
         vm.expectEmit(address(router));
         emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPEN_USDT_ADDRESS, openUsdtBridgeAmount, leafDomain
+            users.alice, TypeCasts.addressToBytes32(users.alice), OPEN_USDT_ADDRESS, openUsdtBridgeAmount, leafDomain
         );
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
@@ -1278,7 +1278,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
         vm.expectEmit(VELO_ADDRESS);
         emit ERC20.Transfer(users.alice, address(router), xVeloBridgeAmount);
         vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, VELO_ADDRESS, xVeloBridgeAmount, leafDomain_2);
+        emit Dispatcher.UniversalRouterBridge(users.alice, TypeCasts.addressToBytes32(users.alice), VELO_ADDRESS, xVeloBridgeAmount, leafDomain_2);
         router.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
         uint256 balanceAfter = address(users.alice).balance;
@@ -1321,7 +1321,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
         vm.expectEmit(XVELO_ADDRESS);
         emit ERC20.Transfer(users.alice, address(leafRouter_2), xVeloBridgeAmount);
         vm.expectEmit(address(router));
-        emit Dispatcher.UniversalRouterBridge(users.alice, users.alice, XVELO_ADDRESS, xVeloBridgeAmount, rootDomain);
+        emit Dispatcher.UniversalRouterBridge(users.alice, TypeCasts.addressToBytes32(users.alice), XVELO_ADDRESS, xVeloBridgeAmount, rootDomain);
         leafRouter_2.execute{value: feeAmount + leftoverETH}(commands, inputs);
 
         uint256 balanceAfter = address(users.alice).balance;
@@ -1433,7 +1433,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
 
         vm.expectEmit(address(router));
         emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPTIMISM_USDC_ADDRESS, usdcBridgeAmount, leafDomain
+            users.alice, TypeCasts.addressToBytes32(users.alice), OPTIMISM_USDC_ADDRESS, usdcBridgeAmount, leafDomain
         );
         router.execute{value: feeAmount}(commands, inputs);
 
@@ -1485,7 +1485,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
 
         vm.expectEmit(address(router));
         emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, OPTIMISM_USDC_ADDRESS, usdcBridgeAmount, leafDomain
+            users.alice, TypeCasts.addressToBytes32(users.alice), OPTIMISM_USDC_ADDRESS, usdcBridgeAmount, leafDomain
         );
         router.execute{value: feeAmount}(commands, inputs);
 
@@ -1575,7 +1575,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
 
         vm.expectEmit(address(router));
         emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, Constants.ETH, nativeBridgeAmount, leafDomain
+            users.alice, TypeCasts.addressToBytes32(users.alice), Constants.ETH, nativeBridgeAmount, leafDomain
         );
         router.execute{value: nativeBridgeAmount}(commands, inputs);
 
@@ -1811,7 +1811,7 @@ contract BridgeTokenTest is BaseOverrideBridge {
 
         vm.expectEmit(address(router));
         emit Dispatcher.UniversalRouterBridge(
-            users.alice, users.alice, address(hypERC20), hypERC20BridgeAmount, leafDomain
+            users.alice, TypeCasts.addressToBytes32(users.alice), address(hypERC20), hypERC20BridgeAmount, leafDomain
         );
         router.execute{value: feeAmount}(commands, inputs);
 
