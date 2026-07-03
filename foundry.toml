@@ -61,6 +61,10 @@ remappings = [
   # v4-periphery submodule. Add new contextual prefixes here as needed.
   "contracts/modules/uniswap/v3/V3SwapRouter.sol:@openzeppelin/contracts/utils/Create2.sol=contracts/overrides/tron/Create2.sol",
   "test/tron/:@openzeppelin/contracts/utils/Create2.sol=contracts/overrides/tron/Create2.sol",
+  # Tron USDT return-data bug — contextual remap so the two files that use solmate's
+  # SafeTransferLib (and any tron-specific tests) resolve to the Tron-safe override.
+  "contracts/modules/Payments.sol:solmate/src/utils/SafeTransferLib.sol=contracts/overrides/tron/SafeTransferLib.sol",
+  "contracts/modules/bridge/BridgeRouter.sol:solmate/src/utils/SafeTransferLib.sol=contracts/overrides/tron/SafeTransferLib.sol",
   "@openzeppelin/contracts/=lib/uniswap-v4-periphery/lib/uniswap-v4-core/lib/openzeppelin-contracts/contracts/",
   "@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/",
   "node_modules/@hyperlane-xyz/:@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable-v4/",
