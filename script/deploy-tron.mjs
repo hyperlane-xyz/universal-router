@@ -26,7 +26,7 @@
 //                       PK=$(op read "op://abacusworks/<deployer>/private_key")
 //
 // Usage:
-//   TRON_RPC_URL=... PRIVATE_KEY=... yarn deploy:tron
+//   TRON_RPC_URL=... TRON_PRIVATE_KEY=... yarn deploy:tron
 //
 // Source-of-truth for params is script/deployParameters/DeployTron.s.sol.
 // Keep this file in sync if the Solidity setUp() changes.
