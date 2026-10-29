@@ -7,6 +7,7 @@ import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
 import {ITokenBridge, Quote, ITokenFee} from '@hyperlane/core/contracts/interfaces/ITokenBridge.sol';
 
 import {IXVeloTokenBridge} from '../../interfaces/external/IXVeloTokenBridge.sol';
+import {ICrossCollateralRouter} from '../../interfaces/external/ICrossCollateralRouter.sol';
 import {BridgeTypes} from '../../libraries/BridgeTypes.sol';
 import {Constants} from '../../libraries/Constants.sol';
 import {Permit2Payments} from './../Permit2Payments.sol';
@@ -34,6 +35,7 @@ abstract contract BridgeRouter is Permit2Payments {
     /// @param maxTokenFee The maximum acceptable fee for token bridging
     /// @param domain The destination domain
     /// @param payer The address to pay for the transfer
+    /// @param targetRouter The destination collateral router for cross-collateral transfers
     function bridgeToken(
         uint8 bridgeType,
         address sender,
@@ -44,7 +46,8 @@ abstract contract BridgeRouter is Permit2Payments {
         uint256 msgFee,
         uint256 maxTokenFee,
         uint32 domain,
-        address payer
+        address payer,
+        bytes32 targetRouter
     ) internal {
         if (recipient == bytes32(0)) revert InvalidRecipient();
 
@@ -79,6 +82,18 @@ abstract contract BridgeRouter is Permit2Payments {
                 executeHypBridge({bridge: bridge, recipient: recipient, amount: bridgeAmount, msgFee: msgFee, domain: domain});
                 ERC20(token).safeApprove({to: bridge, amount: 0});
             }
+        } else if (bridgeType == BridgeTypes.HYP_CROSS_COLLATERAL) {
+            Quote[] memory quotes =
+                ICrossCollateralRouter(bridge).quoteTransferRemoteTo(domain, recipient, amount, targetRouter);
+            uint256 bridgeAmount = quoteExactInputAmount(quotes, token, amount);
+            uint256 tokenFee = amount - bridgeAmount;
+            if (tokenFee > maxTokenFee) revert TokenFeeExceedsMax(tokenFee, maxTokenFee);
+
+            prepareTokensForBridge({_token: token, _bridge: bridge, _payer: payer, _amount: amount});
+            ICrossCollateralRouter(bridge).transferRemoteTo{value: msgFee}(
+                domain, recipient, bridgeAmount, targetRouter
+            );
+            ERC20(token).safeApprove({to: bridge, amount: 0});
         } else {
             revert InvalidBridgeType({bridgeType: bridgeType});
         }
@@ -128,10 +143,17 @@ abstract contract BridgeRouter is Permit2Payments {
         uint256 amount,
         uint32 domain
     ) internal view returns (uint256 bridgeAmount) {
-        Quote[] memory quotes = ITokenFee(bridge).quoteTransferRemote(domain, recipient, amount);
+        return quoteExactInputAmount(ITokenFee(bridge).quoteTransferRemote(domain, recipient, amount), token, amount);
+    }
+
+    function quoteExactInputAmount(Quote[] memory quotes, address token, uint256 amount)
+        private
+        pure
+        returns (uint256)
+    {
         uint256 igpTokenFee = (quotes[0].token == token) ? quotes[0].amount : 0;
         uint256 linearQuotedTokens = quotes[1].amount + quotes[2].amount;
-        bridgeAmount = ((amount - igpTokenFee) * amount) / linearQuotedTokens;
+        return ((amount - igpTokenFee) * amount) / linearQuotedTokens;
     }
 
     /// @dev Moves the tokens from sender to this contract then approves the bridge

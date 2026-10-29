@@ -331,7 +331,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                     (success, output) =
                         address(poolManager).call(abi.encodeCall(IPoolManager.initialize, (poolKey, sqrtPriceX96)));
                 } else if (command == Commands.BRIDGE_TOKEN) {
-                    // equivalent: abi.decode(inputs, (uint8, bytes32, address, address, uint256, uint256, uint256, uint32, bool))
+                    // Cross-collateral appends bytes32 targetRouter to the standard payload.
                     uint8 bridgeType;
                     bytes32 recipient;
                     address token;
@@ -341,6 +341,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                     uint256 maxTokenFee;
                     uint32 domain;
                     address payer;
+                    bytes32 targetRouter;
                     assembly {
                         bridgeType := calldataload(inputs.offset)
                         recipient := calldataload(add(inputs.offset, 0x20))
@@ -350,6 +351,11 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         msgFee := calldataload(add(inputs.offset, 0xA0))
                         maxTokenFee := calldataload(add(inputs.offset, 0xC0))
                         domain := calldataload(add(inputs.offset, 0xE0))
+                    }
+                    if (inputs.length >= 0x140) {
+                        assembly {
+                            targetRouter := calldataload(add(inputs.offset, 0x120))
+                        }
                     }
                     {
                         address sender = msgSender();
@@ -376,7 +382,8 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                         msgFee: msgFee,
                         maxTokenFee: maxTokenFee,
                         domain: domain,
-                        payer: payer
+                        payer: payer,
+                        targetRouter: targetRouter
                     });
                     emit UniversalRouterBridge({
                         sender: msgSender(), recipient: recipient, token: token, amount: amount, domain: domain

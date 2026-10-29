@@ -10,5 +10,6 @@ library BridgeTypes {
     /// @dev HYP_ERC20_COLLATERAL handles both HypERC20Collateral and HypNative; the native
     /// path is selected when the caller passes `token == address(0)`.
     uint8 constant HYP_ERC20_COLLATERAL = 0x03;
+    uint8 constant HYP_CROSS_COLLATERAL = 0x04;
     // Future bridge types can be added here
 }
