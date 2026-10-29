@@ -5,7 +5,10 @@ import {Test} from 'forge-std/Test.sol';
 import {Quote, ITokenFee} from '@hyperlane/core/contracts/interfaces/ITokenBridge.sol';
 import {TypeCasts} from '@hyperlane/core/contracts/libs/TypeCasts.sol';
 import {BridgeRouter} from '../../../contracts/modules/bridge/BridgeRouter.sol';
+import {BridgeTypes} from '../../../contracts/libraries/BridgeTypes.sol';
+import {ICrossCollateralRouter} from '../../../contracts/interfaces/external/ICrossCollateralRouter.sol';
 import {PaymentsParameters, PaymentsImmutables} from '../../../contracts/modules/PaymentsImmutables.sol';
+import {MockERC20} from '../mock/MockERC20.sol';
 
 /// @dev Minimal harness that exposes BridgeRouter.quoteExactInputBridgeAmount for testing
 contract BridgeRouterHarness is BridgeRouter {
@@ -19,6 +22,30 @@ contract BridgeRouterHarness is BridgeRouter {
         uint32 domain
     ) external view returns (uint256) {
         return quoteExactInputBridgeAmount(bridge, token, recipient, amount, domain);
+    }
+
+    function exposed_bridgeCrossCollateral(
+        address bridge,
+        address token,
+        bytes32 recipient,
+        uint256 amount,
+        uint256 msgFee,
+        uint32 domain,
+        bytes32 targetRouter
+    ) external payable {
+        bridgeToken(
+            BridgeTypes.HYP_CROSS_COLLATERAL,
+            msg.sender,
+            recipient,
+            token,
+            bridge,
+            amount,
+            msgFee,
+            amount,
+            domain,
+            msg.sender,
+            targetRouter
+        );
     }
 }
 
@@ -167,5 +194,37 @@ contract QuoteExactInputTest is Test {
         uint256 feeOnBridgeAmount = (internalFee * bridgeAmount) / amount;
         assertApproxEqAbs(bridgeAmount + feeOnBridgeAmount, amount, 1e6, 'bridgeAmount + fee should equal amount');
         assertLt(bridgeAmount, amount);
+    }
+
+    function test_crossCollateralForwardsTargetRouter() public {
+        uint256 amount = 1000e6;
+        uint256 fee = 500000;
+        uint256 msgFee = 0.01 ether;
+        bytes32 targetRouter = bytes32(uint256(0xBEEF));
+        uint256 bridgeAmount = (amount * amount) / (amount + fee);
+        MockERC20 token = new MockERC20();
+        token.mint(address(this), amount);
+        token.approve(address(harness), amount);
+        vm.deal(address(this), msgFee);
+
+        Quote[] memory quotes = new Quote[](3);
+        quotes[0] = Quote({token: address(0), amount: msgFee});
+        quotes[1] = Quote({token: address(token), amount: amount + fee});
+        quotes[2] = Quote({token: address(token), amount: 0});
+        vm.mockCall(
+            BRIDGE,
+            abi.encodeCall(ICrossCollateralRouter.quoteTransferRemoteTo, (DOMAIN, RECIPIENT, amount, targetRouter)),
+            abi.encode(quotes)
+        );
+        bytes memory transferCall =
+            abi.encodeCall(ICrossCollateralRouter.transferRemoteTo, (DOMAIN, RECIPIENT, bridgeAmount, targetRouter));
+        vm.mockCall(BRIDGE, msgFee, transferCall, abi.encode(bytes32(uint256(1))));
+        vm.expectCall(BRIDGE, msgFee, transferCall);
+
+        harness.exposed_bridgeCrossCollateral{value: msgFee}(
+            BRIDGE, address(token), RECIPIENT, amount, msgFee, DOMAIN, targetRouter
+        );
+
+        assertEq(token.allowance(address(harness), BRIDGE), 0);
     }
 }
