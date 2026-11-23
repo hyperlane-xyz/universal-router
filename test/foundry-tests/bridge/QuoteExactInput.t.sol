@@ -18,7 +18,7 @@ contract BridgeRouterHarness is BridgeRouter {
         uint256 amount,
         uint32 domain
     ) external view returns (uint256) {
-        return quoteExactInputBridgeAmount(bridge, token, recipient, amount, domain);
+        return quoteExactInputBridgeAmount(bridge, token, recipient, amount, domain, bytes32(0));
     }
 }
 

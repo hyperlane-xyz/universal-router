@@ -1,4 +1,5 @@
 solmate/=lib/solmate/
+node_modules/@hyperlane-xyz/:permit2/interfaces/=lib/permit2/src/interfaces/
 permit2/=lib/permit2/
 forge-std/=lib/forge-std/src/
 @uniswap/v3-core/=node_modules/@uniswap/v3-core/
