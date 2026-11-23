@@ -57,12 +57,15 @@ bytes memory commands = abi.encodePacked(
 bytes[] memory inputs = new bytes[](2);
 
 // BRIDGE_TOKEN input parameters
+// For HYP_CROSS_COLLATERAL, append the enrolled destination router as a nonzero bytes32 targetRouter after payerIsUser.
 inputs[0] = abi.encode(
-    uint8(BridgeTypes.HYP_XERC20),  // Token bridge type
+    uint8(BridgeTypes.HYP_ERC20_COLLATERAL), // Use the default router for the destination domain
     recipientOnDestination,         // Recipient on destination chain
     sourceTokenAddress,             // Token address on source chain
     tokenBridgeAddress,             // Bridge contract address
     amountToBridge,                 // Amount to bridge
+    msgFee,                         // Native message fee
+    maxTokenFee,                    // Maximum fee deducted from the collateral input
     destinationDomain,              // Domain ID of destination chain
     payerIsUser                     // Whether to use user as payer
 );

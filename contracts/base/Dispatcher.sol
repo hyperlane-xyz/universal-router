@@ -331,7 +331,8 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapRout
                     (success, output) =
                         address(poolManager).call(abi.encodeCall(IPoolManager.initialize, (poolKey, sqrtPriceX96)));
                 } else if (command == Commands.BRIDGE_TOKEN) {
-                    // Cross-collateral appends bytes32 targetRouter to the standard payload.
+                    // The nine standard ABI words end with bool payerIsUser. The optional tenth word is
+                    // bytes32 targetRouter. HYP_CROSS_COLLATERAL requires it to be present and nonzero.
                     uint8 bridgeType;
                     bytes32 recipient;
                     address token;
